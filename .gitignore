@@ -18,3 +18,5 @@ coverage.xml
 htmlcov/
 docker-volume/
 db_*/
+backend/booking_service/models/booking_service_models_refactored.zip
+backend/booking_service/models/booking_service_models_refactored/*

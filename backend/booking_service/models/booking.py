@@ -2,17 +2,13 @@
 Booking model for reservation management
 """
 
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, Numeric
-from typing import Optional, List
+from typing import Optional
 from datetime import datetime, date
 from enum import Enum
 from decimal import Decimal
 import uuid
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .reservation_item import ReservationItem
 
 
 class BookingStatus(str, Enum):
@@ -56,33 +52,40 @@ class Booking(SQLModel, table=True):
     )
 
     # Customer Information
-    customer_id: uuid.UUID = Field(index=True)  # Reference to CRM service
+    customer_id: Optional[uuid.UUID] = Field(
+        index=True, default=None
+    )  # Reference to CRM service
 
     # Booking Details
-    service_type: ServiceType = Field(index=True)
+    service_type: Optional[ServiceType] = Field(index=True, default=None)
     status: BookingStatus = Field(default=BookingStatus.PENDING, index=True)
 
     # Passenger Information
-    pax_count: int = Field(ge=1, le=50)  # Number of passengers
-    lead_passenger_name: str = Field(max_length=255)
-    lead_passenger_email: str = Field(max_length=255)
-    lead_passenger_phone: str = Field(max_length=20)
+    # Number of passengers
+    pax_count: Optional[int] = Field(ge=1, le=50, default=None)
+    lead_passenger_name: Optional[str] = Field(max_length=255, default=None)
+    lead_passenger_email: Optional[str] = Field(max_length=255, default=None)
+    lead_passenger_phone: Optional[str] = Field(max_length=20, default=None)
 
     # Dates and Duration
-    start_date: date = Field(index=True)
+    start_date: Optional[date] = Field(index=True, default=None)
     end_date: Optional[date] = Field(default=None, index=True)
 
     # Pricing
-    base_price: Decimal = Field(sa_column=Column(Numeric(10, 2)))
-    discount_amount: Decimal = Field(
+    base_price: Optional[Decimal] = Field(
+        sa_column=Column(Numeric(10, 2)), default=None
+    )
+    discount_amount: Optional[Decimal] = Field(
         default=0,
         sa_column=Column(Numeric(10, 2)),
     )
-    total_price: Decimal = Field(sa_column=Column(Numeric(10, 2)))
+    total_price: Optional[Decimal] = Field(
+        sa_column=Column(Numeric(10, 2)), default=None
+    )
     currency: str = Field(default="MAD", max_length=3)
 
     # Payment
-    payment_status: PaymentStatus = Field(
+    payment_status: Optional[PaymentStatus] = Field(
         default=PaymentStatus.PENDING,
         index=True,
     )
@@ -99,17 +102,12 @@ class Booking(SQLModel, table=True):
     cancelled_at: Optional[datetime] = Field(default=None)
 
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: Optional[datetime] = Field(
+        default_factory=datetime.utcnow,
+    )
     updated_at: Optional[datetime] = Field(default=None)
     confirmed_at: Optional[datetime] = Field(default=None)
     expires_at: Optional[datetime] = Field(default=None)
-
-    # Relationships
-    reservation_items: List["ReservationItem"] = Relationship(
-        back_populates="booking",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
-        repr=False,
-    )
 
     def calculate_total_price(self) -> Decimal:
         """Calculate total price including discounts"""

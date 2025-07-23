@@ -2,17 +2,13 @@
 Reservation item model for booking components
 """
 
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, Numeric
 from typing import Optional
 from datetime import datetime
 from enum import Enum
 from decimal import Decimal
 import uuid
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from .booking import Booking
 
 
 class ItemType(str, Enum):
@@ -32,29 +28,35 @@ class ReservationItem(SQLModel, table=True):
     __tablename__ = "reservation_items"
 
     id: Optional[uuid.UUID] = Field(
-        default_factory=uuid.uuid4,
-        primary_key=True,
+        default_factory=uuid.uuid4, primary_key=True,
     )
 
     # Foreign Keys
-    booking_id: uuid.UUID = Field(foreign_key="bookings.id", index=True)
+    booking_id: Optional[uuid.UUID] = Field(
+        foreign_key="bookings.id", index=True, default=None
+    )
 
     # Item Details
-    type: ItemType = Field(index=True)
+    type: Optional[ItemType] = Field(index=True, default=None)
     reference_id: Optional[uuid.UUID] = Field(
-        default=None, index=True
+        default=None,
+        index=True,
     )  # FK to external service
-    name: str = Field(max_length=255)
+    name: Optional[str] = Field(max_length=255, default=None)
     description: Optional[str] = Field(default=None, max_length=1000)
 
     # Quantity and Pricing
     quantity: int = Field(default=1, ge=1)
-    unit_price: Decimal = Field(sa_column=Column(Numeric(10, 2)))
-    total_price: Decimal = Field(sa_column=Column(Numeric(10, 2)))
+    unit_price: Optional[Decimal] = Field(
+        sa_column=Column(Numeric(10, 2)), default=None
+    )
+    total_price: Optional[Decimal] = Field(
+        sa_column=Column(Numeric(10, 2)), default=None
+    )
 
     # Additional Information
     specifications: Optional[str] = Field(
-        default=None
+        default=None,
     )  # JSON string for item-specific data
     notes: Optional[str] = Field(default=None, max_length=500)
 
@@ -63,13 +65,10 @@ class ReservationItem(SQLModel, table=True):
     is_cancelled: bool = Field(default=False)
 
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: Optional[datetime] = Field(default=None)
-
-    # Relationships
-    booking: Optional["Booking"] = Relationship(
-        back_populates="reservation_items", repr=False
+    created_at: Optional[datetime] = Field(
+        default_factory=datetime.utcnow,
     )
+    updated_at: Optional[datetime] = Field(default=None)
 
     def get_specifications_dict(self) -> dict:
         """Parse specifications from JSON string"""
