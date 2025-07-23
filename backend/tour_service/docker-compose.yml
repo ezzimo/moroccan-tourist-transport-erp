@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  tour_app:
+    build: .
+    ports:
+      - "8003:8003"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@tour_db:5432/tour_db
+      - REDIS_URL=redis://tour_redis:6379/3
+      - AUTH_SERVICE_URL=http://auth_app:8000
+      - CRM_SERVICE_URL=http://crm_app:8001
+      - BOOKING_SERVICE_URL=http://booking_app:8002
+      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - ENVIRONMENT=development
+    depends_on:
+      - tour_db
+      - tour_redis
+    volumes:
+      - .:/app
+    command: uvicorn tour_service.main:app --host 0.0.0.0 --port 8003 --reload
+
+  tour_db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=tour_db
+    ports:
+      - "5435:5432"
+    volumes:
+      - tour_postgres_data:/var/lib/postgresql/data
+
+  tour_redis:
+    image: redis:7-alpine
+    ports:
+      - "6382:6379"
+    volumes:
+      - tour_redis_data:/data
+
+volumes:
+  tour_postgres_data:
+  tour_redis_data:

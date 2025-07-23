@@ -1,0 +1,290 @@
+version: '3.9'
+services:
+  db_auth:
+    image: postgres:15
+    container_name: db_auth
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: auth_pass
+      POSTGRES_DB: auth_db
+    ports:
+    - 5432:5432
+    volumes:
+    - db_auth:/var/lib/postgresql/data
+    networks:
+    - erp_net
+  auth_service:
+    build: ./backend/app
+    container_name: auth_service
+    ports:
+    - 8000:8000
+    env_file:
+    - ./backend/app/.env.example
+    depends_on:
+    - db_auth
+    networks:
+    - erp_net
+  db_crm:
+    image: postgres:15
+    container_name: db_crm
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: crm_pass
+      POSTGRES_DB: crm_db
+    ports:
+    - 5433:5432
+    volumes:
+    - db_crm:/var/lib/postgresql/data
+    networks:
+    - erp_net
+  crm_service:
+    build: ./backend/crm_service
+    container_name: crm_service
+    ports:
+    - 8001:8001
+    env_file:
+    - ./backend/crm_service/.env.example
+    depends_on:
+    - db_crm
+    networks:
+    - erp_net
+  db_booking:
+    image: postgres:15
+    container_name: db_booking
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: booking_pass
+      POSTGRES_DB: booking_db
+    ports:
+    - 5434:5432
+    volumes:
+    - db_booking:/var/lib/postgresql/data
+    networks:
+    - erp_net
+  booking_service:
+    build: ./backend/booking_service
+    container_name: booking_service
+    ports:
+    - 8002:8002
+    env_file:
+    - ./backend/booking_service/.env.example
+    depends_on:
+    - db_booking
+    networks:
+    - erp_net
+  db_driver:
+    image: postgres:15
+    container_name: db_driver
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: driver_pass
+      POSTGRES_DB: driver_db
+    ports:
+    - 5435:5432
+    volumes:
+    - db_driver:/var/lib/postgresql/data
+    networks:
+    - erp_net
+  driver_service:
+    build: ./backend/driver_service
+    container_name: driver_service
+    ports:
+    - 8003:8003
+    env_file:
+    - ./backend/driver_service/.env.example
+    depends_on:
+    - db_driver
+    networks:
+    - erp_net
+  db_fleet:
+    image: postgres:15
+    container_name: db_fleet
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: fleet_pass
+      POSTGRES_DB: fleet_db
+    ports:
+    - 5436:5432
+    volumes:
+    - db_fleet:/var/lib/postgresql/data
+    networks:
+    - erp_net
+  fleet_service:
+    build: ./backend/fleet_service
+    container_name: fleet_service
+    ports:
+    - 8004:8004
+    env_file:
+    - ./backend/fleet_service/.env.example
+    depends_on:
+    - db_fleet
+    networks:
+    - erp_net
+  db_financial:
+    image: postgres:15
+    container_name: db_financial
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: financial_pass
+      POSTGRES_DB: financial_db
+    ports:
+    - 5437:5432
+    volumes:
+    - db_financial:/var/lib/postgresql/data
+    networks:
+    - erp_net
+  financial_service:
+    build: ./backend/financial_service
+    container_name: financial_service
+    ports:
+    - 8005:8005
+    env_file:
+    - ./backend/financial_service/.env.example
+    depends_on:
+    - db_financial
+    networks:
+    - erp_net
+  db_hr:
+    image: postgres:15
+    container_name: db_hr
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: hr_pass
+      POSTGRES_DB: hr_db
+    ports:
+    - 5438:5432
+    volumes:
+    - db_hr:/var/lib/postgresql/data
+    networks:
+    - erp_net
+  hr_service:
+    build: ./backend/hr_service
+    container_name: hr_service
+    ports:
+    - 8006:8006
+    env_file:
+    - ./backend/hr_service/.env.example
+    depends_on:
+    - db_hr
+    networks:
+    - erp_net
+  db_inventory:
+    image: postgres:15
+    container_name: db_inventory
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: inventory_pass
+      POSTGRES_DB: inventory_db
+    ports:
+    - 5439:5432
+    volumes:
+    - db_inventory:/var/lib/postgresql/data
+    networks:
+    - erp_net
+  inventory_service:
+    build: ./backend/inventory_service
+    container_name: inventory_service
+    ports:
+    - 8007:8007
+    env_file:
+    - ./backend/inventory_service/.env.example
+    depends_on:
+    - db_inventory
+    networks:
+    - erp_net
+  db_notification:
+    image: postgres:15
+    container_name: db_notification
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: notification_pass
+      POSTGRES_DB: notification_db
+    ports:
+    - 5440:5432
+    volumes:
+    - db_notification:/var/lib/postgresql/data
+    networks:
+    - erp_net
+  notification_service:
+    build: ./backend/notification_service
+    container_name: notification_service
+    ports:
+    - 8008:8008
+    env_file:
+    - ./backend/notification_service/.env.example
+    depends_on:
+    - db_notification
+    networks:
+    - erp_net
+  db_qa:
+    image: postgres:15
+    container_name: db_qa
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: qa_pass
+      POSTGRES_DB: qa_db
+    ports:
+    - 5441:5432
+    volumes:
+    - db_qa:/var/lib/postgresql/data
+    networks:
+    - erp_net
+  qa_service:
+    build: ./backend/qa_service
+    container_name: qa_service
+    ports:
+    - 8009:8009
+    env_file:
+    - ./backend/qa_service/.env.example
+    depends_on:
+    - db_qa
+    networks:
+    - erp_net
+  db_tour:
+    image: postgres:15
+    container_name: db_tour
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: tour_pass
+      POSTGRES_DB: tour_db
+    ports:
+    - 5442:5432
+    volumes:
+    - db_tour:/var/lib/postgresql/data
+    networks:
+    - erp_net
+  tour_service:
+    build: ./backend/tour_service
+    container_name: tour_service
+    ports:
+    - 8010:8010
+    env_file:
+    - ./backend/tour_service/.env.example
+    depends_on:
+    - db_tour
+    networks:
+    - erp_net
+  frontend:
+    build: ./frontend
+    container_name: tourist_frontend
+    ports:
+    - 3000:80
+    depends_on:
+    - auth_service
+    networks:
+    - erp_net
+volumes:
+  db_auth: {}
+  db_crm: {}
+  db_booking: {}
+  db_driver: {}
+  db_fleet: {}
+  db_financial: {}
+  db_hr: {}
+  db_inventory: {}
+  db_notification: {}
+  db_qa: {}
+  db_tour: {}
+networks:
+  erp_net:
+    driver: bridge

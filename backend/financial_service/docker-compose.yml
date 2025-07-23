@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  financial_app:
+    build: .
+    ports:
+      - "8006:8006"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@financial_db:5432/financial_db
+      - REDIS_URL=redis://financial_redis:6379/6
+      - AUTH_SERVICE_URL=http://auth_app:8000
+      - CRM_SERVICE_URL=http://crm_app:8001
+      - BOOKING_SERVICE_URL=http://booking_app:8002
+      - TOUR_SERVICE_URL=http://tour_app:8003
+      - FLEET_SERVICE_URL=http://fleet_app:8004
+      - HR_SERVICE_URL=http://hr_app:8005
+      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - ENVIRONMENT=development
+    depends_on:
+      - financial_db
+      - financial_redis
+    volumes:
+      - .:/app
+      - ./uploads:/app/uploads
+    command: uvicorn financial_service.main:app --host 0.0.0.0 --port 8006 --reload
+
+  financial_db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=financial_db
+    ports:
+      - "5438:5432"
+    volumes:
+      - financial_postgres_data:/var/lib/postgresql/data
+
+  financial_redis:
+    image: redis:7-alpine
+    ports:
+      - "6385:6379"
+    volumes:
+      - financial_redis_data:/data
+
+volumes:
+  financial_postgres_data:
+  financial_redis_data:

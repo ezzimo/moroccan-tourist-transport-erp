@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  booking_app:
+    build: .
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@booking_db:5432/booking_db
+      - REDIS_URL=redis://booking_redis:6379/2
+      - AUTH_SERVICE_URL=http://auth_app:8000
+      - CRM_SERVICE_URL=http://crm_app:8001
+      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - ENVIRONMENT=development
+    depends_on:
+      - booking_db
+      - booking_redis
+    volumes:
+      - .:/app
+    command: uvicorn booking_service.main:app --host 0.0.0.0 --port 8002 --reload
+
+  booking_db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=booking_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - booking_postgres_data:/var/lib/postgresql/data
+
+  booking_redis:
+    image: redis:7-alpine
+    ports:
+      - "6381:6379"
+    volumes:
+      - booking_redis_data:/data
+
+volumes:
+  booking_postgres_data:
+  booking_redis_data:

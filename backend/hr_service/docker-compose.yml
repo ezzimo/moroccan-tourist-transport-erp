@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  hr_app:
+    build: .
+    ports:
+      - "8005:8005"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@hr_db:5432/hr_db
+      - REDIS_URL=redis://hr_redis:6379/5
+      - AUTH_SERVICE_URL=http://auth_app:8000
+      - CRM_SERVICE_URL=http://crm_app:8001
+      - BOOKING_SERVICE_URL=http://booking_app:8002
+      - TOUR_SERVICE_URL=http://tour_app:8003
+      - FLEET_SERVICE_URL=http://fleet_app:8004
+      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - ENVIRONMENT=development
+    depends_on:
+      - hr_db
+      - hr_redis
+    volumes:
+      - .:/app
+      - ./uploads:/app/uploads
+    command: uvicorn hr_service.main:app --host 0.0.0.0 --port 8005 --reload
+
+  hr_db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=hr_db
+    ports:
+      - "5437:5432"
+    volumes:
+      - hr_postgres_data:/var/lib/postgresql/data
+
+  hr_redis:
+    image: redis:7-alpine
+    ports:
+      - "6384:6379"
+    volumes:
+      - hr_redis_data:/data
+
+volumes:
+  hr_postgres_data:
+  hr_redis_data:

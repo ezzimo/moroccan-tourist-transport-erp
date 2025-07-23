@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  fleet_app:
+    build: .
+    ports:
+      - "8004:8004"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@fleet_db:5432/fleet_db
+      - REDIS_URL=redis://fleet_redis:6379/4
+      - AUTH_SERVICE_URL=http://auth_app:8000
+      - CRM_SERVICE_URL=http://crm_app:8001
+      - BOOKING_SERVICE_URL=http://booking_app:8002
+      - TOUR_SERVICE_URL=http://tour_app:8003
+      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - ENVIRONMENT=development
+    depends_on:
+      - fleet_db
+      - fleet_redis
+    volumes:
+      - .:/app
+      - ./uploads:/app/uploads
+    command: uvicorn fleet_service.main:app --host 0.0.0.0 --port 8004 --reload
+
+  fleet_db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=fleet_db
+    ports:
+      - "5436:5432"
+    volumes:
+      - fleet_postgres_data:/var/lib/postgresql/data
+
+  fleet_redis:
+    image: redis:7-alpine
+    ports:
+      - "6383:6379"
+    volumes:
+      - fleet_redis_data:/data
+
+volumes:
+  fleet_postgres_data:
+  fleet_redis_data:

@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  driver_app:
+    build: .
+    ports:
+      - "8010:8010"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@driver_db:5432/driver_db
+      - REDIS_URL=redis://driver_redis:6379/10
+      - AUTH_SERVICE_URL=http://auth_app:8000
+      - TOUR_SERVICE_URL=http://tour_app:8003
+      - FLEET_SERVICE_URL=http://fleet_app:8004
+      - HR_SERVICE_URL=http://hr_app:8005
+      - NOTIFICATION_SERVICE_URL=http://notification_app:8007
+      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - ENVIRONMENT=development
+    depends_on:
+      - driver_db
+      - driver_redis
+    volumes:
+      - .:/app
+      - ./uploads:/app/uploads
+    command: uvicorn driver_service.main:app --host 0.0.0.0 --port 8010 --reload
+
+  driver_db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=driver_db
+    ports:
+      - "5442:5432"
+    volumes:
+      - driver_postgres_data:/var/lib/postgresql/data
+
+  driver_redis:
+    image: redis:7-alpine
+    ports:
+      - "6389:6379"
+    volumes:
+      - driver_redis_data:/data
+
+volumes:
+  driver_postgres_data:
+  driver_redis_data:

@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  inventory_app:
+    build: .
+    ports:
+      - "8008:8008"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@inventory_db:5432/inventory_db
+      - REDIS_URL=redis://inventory_redis:6379/8
+      - AUTH_SERVICE_URL=http://auth_app:8000
+      - FLEET_SERVICE_URL=http://fleet_app:8004
+      - FINANCIAL_SERVICE_URL=http://financial_app:8006
+      - HR_SERVICE_URL=http://hr_app:8005
+      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - ENVIRONMENT=development
+    depends_on:
+      - inventory_db
+      - inventory_redis
+    volumes:
+      - .:/app
+      - ./uploads:/app/uploads
+    command: uvicorn inventory_service.main:app --host 0.0.0.0 --port 8008 --reload
+
+  inventory_db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=inventory_db
+    ports:
+      - "5440:5432"
+    volumes:
+      - inventory_postgres_data:/var/lib/postgresql/data
+
+  inventory_redis:
+    image: redis:7-alpine
+    ports:
+      - "6387:6379"
+    volumes:
+      - inventory_redis_data:/data
+
+volumes:
+  inventory_postgres_data:
+  inventory_redis_data:

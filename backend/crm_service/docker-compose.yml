@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  crm_app:
+    build: .
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@crm_db:5432/crm_db
+      - REDIS_URL=redis://crm_redis:6379/1
+      - AUTH_SERVICE_URL=http://auth_app:8000
+      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - ENVIRONMENT=development
+    depends_on:
+      - crm_db
+      - crm_redis
+    volumes:
+      - .:/app
+    command: uvicorn crm_service.main:app --host 0.0.0.0 --port 8001 --reload
+
+  crm_db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=crm_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - crm_postgres_data:/var/lib/postgresql/data
+
+  crm_redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - crm_redis_data:/data
+
+volumes:
+  crm_postgres_data:
+  crm_redis_data:

@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  notification_app:
+    build: .
+    ports:
+      - "8007:8007"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@notification_db:5432/notification_db
+      - REDIS_URL=redis://notification_redis:6379/7
+      - AUTH_SERVICE_URL=http://auth_app:8000
+      - CRM_SERVICE_URL=http://crm_app:8001
+      - BOOKING_SERVICE_URL=http://booking_app:8002
+      - TOUR_SERVICE_URL=http://tour_app:8003
+      - FLEET_SERVICE_URL=http://fleet_app:8004
+      - HR_SERVICE_URL=http://hr_app:8005
+      - FINANCIAL_SERVICE_URL=http://financial_app:8006
+      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - ENVIRONMENT=development
+    depends_on:
+      - notification_db
+      - notification_redis
+    volumes:
+      - .:/app
+    command: uvicorn notification_service.main:app --host 0.0.0.0 --port 8007 --reload
+
+  notification_db:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=notification_db
+    ports:
+      - "5439:5432"
+    volumes:
+      - notification_postgres_data:/var/lib/postgresql/data
+
+  notification_redis:
+    image: redis:7-alpine
+    ports:
+      - "6386:6379"
+    volumes:
+      - notification_redis_data:/data
+
+volumes:
+  notification_postgres_data:
+  notification_redis_data:
