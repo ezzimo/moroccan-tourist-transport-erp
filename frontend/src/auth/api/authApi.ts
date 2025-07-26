@@ -1,9 +1,11 @@
-import { apiClient } from '../../api/client';
+import apiClient from '../../api/client';
 import { LoginCredentials, LoginResponse, User, UserMeResponse } from '../types/auth';
 
 export const authApi = {
   login: async (credentials: LoginCredentials): Promise<LoginResponse> => {
+    console.log('🔐 Login request starting...', credentials.email);
     const response = await apiClient.post('/auth/login', credentials);
+    console.log('🔐 Login response received:', response.data);
     return response.data;
   },
 

@@ -1,0 +1,154 @@
+version: "3.9"
+
+networks:
+  app-network:
+    driver: bridge
+
+services:
+  # Database Services
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres_main
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: transport_erp
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U demo"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis_main
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Backend Services
+  auth_service:
+    build: 
+      context: ./backend
+      dockerfile: app/Dockerfile
+    container_name: auth_service
+    environment:
+      - DATABASE_URL=postgresql://demo:secret@postgres:5432/transport_erp
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET_KEY=your-secret-key-here-change-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  fleet_service:
+    build:
+      context: ./backend
+      dockerfile: fleet_service/Dockerfile
+    container_name: fleet_service
+    environment:
+      - DATABASE_URL=postgresql://demo:secret@postgres:5432/transport_erp
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  booking_service:
+    build:
+      context: ./backend
+      dockerfile: booking_service/Dockerfile
+    container_name: booking_service
+    environment:
+      - DATABASE_URL=postgresql://demo:secret@postgres:5432/transport_erp
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Frontend Service
+  frontend:
+    build: ./frontend
+    container_name: frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      auth_service:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pgdata:
+

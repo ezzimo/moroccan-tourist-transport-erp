@@ -12,17 +12,31 @@ services:
     - db_auth:/var/lib/postgresql/data
     networks:
     - erp_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
   auth_service:
     build: ./backend/app
     container_name: auth_service
     ports:
     - 8000:8000
     env_file:
-    - ./backend/app/.env.example
+    - ./backend/app/.env
     depends_on:
-    - db_auth
+      db_auth:
+        condition: service_healthy
+      redis_auth:
+        condition: service_healthy
     networks:
     - erp_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
   db_crm:
     image: postgres:15
     container_name: db_crm
@@ -272,6 +286,19 @@ services:
     - auth_service
     networks:
     - erp_net
+  redis_auth:
+    image: redis:latest
+    container_name: redis_auth
+    ports:
+    - 6379:6379
+    networks:
+    - erp_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 volumes:
   db_auth: {}
   db_crm: {}
@@ -287,3 +314,5 @@ volumes:
 networks:
   erp_net:
     driver: bridge
+
+

@@ -68,12 +68,42 @@ async def startup_event():
 # Health check
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "service": "auth-microservice",
-        "version": "1.0.0"
-    }
+    """Health check endpoint with database and Redis connectivity tests"""
+    try:
+        from database import get_session, get_redis
+        from sqlmodel import text
+        
+        # Test database connection
+        db = next(get_session())
+        db.exec(text("SELECT 1"))
+        db.close()
+        
+        # Test Redis connection using configured client
+        try:
+            redis_client = get_redis()
+            redis_client.ping()
+            redis_status = "healthy"
+        except Exception as redis_error:
+            redis_status = f"unhealthy: {str(redis_error)}"
+        
+        return {
+            "status": "healthy",
+            "service": "auth-microservice",
+            "version": "1.0.0",
+            "database": "healthy",
+            "redis": redis_status
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "unhealthy",
+                "service": "auth-microservice",
+                "version": "1.0.0",
+                "error": str(e)
+            }
+        )
 
 
 # Include routers

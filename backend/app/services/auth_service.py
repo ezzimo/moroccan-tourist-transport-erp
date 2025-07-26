@@ -60,7 +60,7 @@ class AuthService:
             access_token=access_token,
             token_type="bearer",
             expires_in=settings.access_token_expire_minutes * 60,
-            user=UserResponse.model_validate(user)
+            user=UserResponse.model_validate(user.model_dump())
         )
     
     async def logout(self, token: str) -> dict:
