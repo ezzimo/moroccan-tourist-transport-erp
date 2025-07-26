@@ -12,7 +12,7 @@ from schemas.compliance_requirement import (
 from models.compliance_requirement import ComplianceDomain, ComplianceStatus, RequirementType
 from utils.auth import require_permission, CurrentUser
 from utils.pagination import PaginationParams, PaginatedResponse
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import redis
 import uuid
 

@@ -2,7 +2,7 @@
 User preference model for notification settings
 """
 from sqlmodel import SQLModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from models.notification import NotificationChannel, NotificationType
 import uuid

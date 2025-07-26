@@ -1,14 +1,20 @@
 """
 Booking management routes
 """
+
 from fastapi import APIRouter, Depends, Query, Response
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session
 from database import get_session, get_redis
 from services.booking_service import BookingService
 from schemas.booking import (
-    BookingCreate, BookingUpdate, BookingResponse, BookingSummary, 
-    BookingConfirm, BookingCancel, BookingSearch
+    BookingCreate,
+    BookingUpdate,
+    BookingResponse,
+    BookingSummary,
+    BookingConfirm,
+    BookingCancel,
+    BookingSearch,
 )
 from utils.auth import require_permission, CurrentUser
 from utils.pagination import PaginationParams, PaginatedResponse
@@ -27,7 +33,9 @@ async def create_booking(
     booking_data: BookingCreate,
     session: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(require_permission("booking", "create", "bookings"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "create", "bookings")
+    ),
 ):
     """Create a new booking"""
     booking_service = BookingService(session, redis_client)
@@ -38,34 +46,62 @@ async def create_booking(
 async def get_bookings(
     pagination: PaginationParams = Depends(),
     customer_id: Optional[uuid.UUID] = Query(None, description="Filter by customer ID"),
-    status: Optional[BookingStatus] = Query(None, description="Filter by booking status"),
-    service_type: Optional[ServiceType] = Query(None, description="Filter by service type"),
-    payment_status: Optional[PaymentStatus] = Query(None, description="Filter by payment status"),
-    start_date_from: Optional[str] = Query(None, description="Filter by start date from (YYYY-MM-DD)"),
-    start_date_to: Optional[str] = Query(None, description="Filter by start date to (YYYY-MM-DD)"),
-    lead_passenger_name: Optional[str] = Query(None, description="Filter by passenger name"),
-    lead_passenger_email: Optional[str] = Query(None, description="Filter by passenger email"),
+    status: Optional[BookingStatus] = Query(
+        None, description="Filter by booking status"
+    ),
+    service_type: Optional[ServiceType] = Query(
+        None, description="Filter by service type"
+    ),
+    payment_status: Optional[PaymentStatus] = Query(
+        None, description="Filter by payment status"
+    ),
+    start_date_from: Optional[str] = Query(
+        None, description="Filter by start date from (YYYY-MM-DD)"
+    ),
+    start_date_to: Optional[str] = Query(
+        None, description="Filter by start date to (YYYY-MM-DD)"
+    ),
+    lead_passenger_name: Optional[str] = Query(
+        None, description="Filter by passenger name"
+    ),
+    lead_passenger_email: Optional[str] = Query(
+        None, description="Filter by passenger email"
+    ),
     session: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(require_permission("booking", "read", "bookings"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "read", "bookings")
+    ),
 ):
     """Get list of bookings with optional search and filters"""
     booking_service = BookingService(session, redis_client)
-    
+
     # Build search criteria
     search = None
-    if any([customer_id, status, service_type, payment_status, start_date_from, start_date_to, 
-            lead_passenger_name, lead_passenger_email]):
+    if any(
+        [
+            customer_id,
+            status,
+            service_type,
+            payment_status,
+            start_date_from,
+            start_date_to,
+            lead_passenger_name,
+            lead_passenger_email,
+        ]
+    ):
         from datetime import datetime
-        
+
         start_date_from_parsed = None
         start_date_to_parsed = None
-        
+
         if start_date_from:
-            start_date_from_parsed = datetime.strptime(start_date_from, "%Y-%m-%d").date()
+            start_date_from_parsed = datetime.strptime(
+                start_date_from, "%Y-%m-%d"
+            ).date()
         if start_date_to:
             start_date_to_parsed = datetime.strptime(start_date_to, "%Y-%m-%d").date()
-        
+
         search = BookingSearch(
             customer_id=customer_id,
             status=status,
@@ -74,16 +110,13 @@ async def get_bookings(
             start_date_from=start_date_from_parsed,
             start_date_to=start_date_to_parsed,
             lead_passenger_name=lead_passenger_name,
-            lead_passenger_email=lead_passenger_email
+            lead_passenger_email=lead_passenger_email,
         )
-    
+
     bookings, total = await booking_service.get_bookings(pagination, search)
-    
+
     return PaginatedResponse.create(
-        items=bookings,
-        total=total,
-        page=pagination.page,
-        size=pagination.size
+        items=bookings, total=total, page=pagination.page, size=pagination.size
     )
 
 
@@ -92,7 +125,9 @@ async def get_booking(
     booking_id: uuid.UUID,
     session: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(require_permission("booking", "read", "bookings"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "read", "bookings")
+    ),
 ):
     """Get booking by ID"""
     booking_service = BookingService(session, redis_client)
@@ -104,7 +139,9 @@ async def get_booking_summary(
     booking_id: uuid.UUID,
     session: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(require_permission("booking", "read", "bookings"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "read", "bookings")
+    ),
 ):
     """Get comprehensive booking summary"""
     booking_service = BookingService(session, redis_client)
@@ -117,7 +154,9 @@ async def update_booking(
     booking_data: BookingUpdate,
     session: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(require_permission("booking", "update", "bookings"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "update", "bookings")
+    ),
 ):
     """Update booking information"""
     booking_service = BookingService(session, redis_client)
@@ -130,7 +169,9 @@ async def confirm_booking(
     confirm_data: BookingConfirm,
     session: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(require_permission("booking", "update", "bookings"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "update", "bookings")
+    ),
 ):
     """Confirm a pending booking"""
     booking_service = BookingService(session, redis_client)
@@ -143,11 +184,15 @@ async def cancel_booking(
     cancel_data: BookingCancel,
     session: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(require_permission("booking", "update", "bookings"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "update", "bookings")
+    ),
 ):
     """Cancel a booking"""
     booking_service = BookingService(session, redis_client)
-    return await booking_service.cancel_booking(booking_id, cancel_data, current_user.user_id)
+    return await booking_service.cancel_booking(
+        booking_id, cancel_data, current_user.user_id
+    )
 
 
 @router.get("/{booking_id}/voucher")
@@ -155,34 +200,40 @@ async def get_booking_voucher(
     booking_id: uuid.UUID,
     session: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(require_permission("booking", "read", "bookings"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "read", "bookings")
+    ),
 ):
     """Generate and download booking voucher PDF"""
     booking_service = BookingService(session, redis_client)
-    
+
     # Get booking details
     booking_response = await booking_service.get_booking(booking_id)
-    
+
     # Get booking model for PDF generation
     from sqlmodel import select
     from models.booking import Booking
     from models.reservation_item import ReservationItem
-    
+
     statement = select(Booking).where(Booking.id == booking_id)
     booking = session.exec(statement).first()
-    
+
     # Get reservation items
-    items_statement = select(ReservationItem).where(ReservationItem.booking_id == booking_id)
+    items_statement = select(ReservationItem).where(
+        ReservationItem.booking_id == booking_id
+    )
     reservation_items = session.exec(items_statement).all()
-    
+
     # Generate PDF
     pdf_buffer = generate_booking_voucher(booking, reservation_items)
-    
+
     # Return PDF as streaming response
     return StreamingResponse(
         pdf_buffer,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=booking_voucher_{booking_id}.pdf"}
+        headers={
+            "Content-Disposition": f"attachment; filename=booking_voucher_{booking_id}.pdf"
+        },
     )
 
 
@@ -191,12 +242,14 @@ async def expire_booking(
     booking_id: uuid.UUID,
     session: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(require_permission("booking", "update", "bookings"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "update", "bookings")
+    ),
 ):
     """Manually expire a booking (admin only)"""
     booking_service = BookingService(session, redis_client)
     success = await booking_service.expire_booking(booking_id)
-    
+
     if success:
         return {"message": "Booking expired successfully"}
     else:

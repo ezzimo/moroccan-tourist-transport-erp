@@ -2,7 +2,7 @@
 Compliance requirement-related Pydantic schemas
 """
 from pydantic import BaseModel, validator
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from models.compliance_requirement import ComplianceDomain, ComplianceStatus, RequirementType
 import uuid

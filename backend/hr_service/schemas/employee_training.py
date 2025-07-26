@@ -2,7 +2,7 @@
 Employee training-related Pydantic schemas
 """
 from pydantic import BaseModel, validator
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from models.employee_training import AttendanceStatus, CompletionStatus
 import uuid

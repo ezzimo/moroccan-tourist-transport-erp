@@ -2,6 +2,7 @@
 Invoice item model for line items
 """
 from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import Column, Numeric
 from typing import Optional
 from decimal import Decimal
 import uuid

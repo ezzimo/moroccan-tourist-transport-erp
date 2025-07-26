@@ -3,8 +3,8 @@ Pagination utilities
 """
 from fastapi import Query
 from pydantic import BaseModel
-from typing import List, TypeVar, Generic
 from sqlmodel import Session, select, func
+from typing import List, TypeVar, Generic
 from config import settings
 
 T = TypeVar('T')

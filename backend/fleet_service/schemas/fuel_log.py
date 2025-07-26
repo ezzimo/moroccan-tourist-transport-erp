@@ -8,7 +8,7 @@ import uuid
 
 
 class FuelLogBase(BaseModel):
-    date: date
+    slot_date: date
     odometer_reading: int
     fuel_amount: float
     fuel_cost: float
@@ -40,7 +40,7 @@ class FuelLogCreate(FuelLogBase):
 
 
 class FuelLogUpdate(BaseModel):
-    date: Optional[date] = None
+    slot_date: Optional[date] = None
     odometer_reading: Optional[int] = None
     fuel_amount: Optional[float] = None
     fuel_cost: Optional[float] = None

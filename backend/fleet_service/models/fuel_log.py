@@ -20,7 +20,7 @@ class FuelLog(SQLModel, table=True):
     vehicle_id: uuid.UUID = Field(foreign_key="vehicles.id", index=True)
     
     # Fuel Details
-    date: date = Field(index=True)
+    slot_date: date = Field(index=True)
     odometer_reading: int = Field(ge=0)
     fuel_amount: float = Field(ge=0)  # in liters
     fuel_cost: float = Field(ge=0)  # total cost

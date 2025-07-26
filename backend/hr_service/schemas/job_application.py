@@ -2,7 +2,7 @@
 Job application-related Pydantic schemas
 """
 from pydantic import BaseModel, EmailStr, validator
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from models.job_application import ApplicationSource, ApplicationStage, Priority
 import uuid

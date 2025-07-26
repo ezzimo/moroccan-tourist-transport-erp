@@ -2,7 +2,7 @@
 Job application model for recruitment tracking
 """
 from sqlmodel import SQLModel, Field
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from enum import Enum
 import uuid

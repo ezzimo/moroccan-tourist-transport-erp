@@ -2,7 +2,7 @@
 Payment-related Pydantic schemas
 """
 from pydantic import BaseModel, validator
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, List
 from datetime import datetime, date
 from decimal import Decimal
 from models.payment import PaymentMethod, PaymentStatus

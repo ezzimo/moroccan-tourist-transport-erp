@@ -1,15 +1,18 @@
 """
-Certification model for tracking organizational certifications
+Certification model – QA service
 """
-from sqlmodel import SQLModel, Field
-from typing import Optional
-from datetime import datetime, date
-from enum import Enum
+from __future__ import annotations
+
 import uuid
+from datetime import datetime, date, timedelta
+from enum import Enum
+from typing import Optional
+
+from sqlmodel import Field, SQLModel
 
 
+# ──────────────────────────────── ENUMS ────────────────────────────────
 class CertificationType(str, Enum):
-    """Certification type enumeration"""
     ISO_9001 = "ISO 9001"
     ISO_14001 = "ISO 14001"
     ISO_45001 = "ISO 45001"
@@ -23,16 +26,14 @@ class CertificationType(str, Enum):
 
 
 class CertificationStatus(str, Enum):
-    """Certification status enumeration"""
     ACTIVE = "Active"
     EXPIRED = "Expired"
     SUSPENDED = "Suspended"
     PENDING_RENEWAL = "Pending Renewal"
-    CANCELLED = "Cancelled"
+    PENDING = "Pending"  # ↞ needed by service.create_certification
 
 
 class CertificationScope(str, Enum):
-    """Certification scope enumeration"""
     COMPANY_WIDE = "Company-wide"
     DEPARTMENT = "Department"
     INDIVIDUAL = "Individual"
@@ -40,113 +41,94 @@ class CertificationScope(str, Enum):
     LOCATION = "Location"
 
 
+class EntityType(str, Enum):
+    """What object does the certificate bind to?"""
+    COMPANY = "Company"
+    DEPARTMENT = "Department"
+    EMPLOYEE = "Employee"
+    DRIVER = "Driver"
+    VEHICLE = "Vehicle"
+    LOCATION = "Location"
+    OTHER = "Other"
+
+
+# ──────────────────────────────── MODEL ────────────────────────────────
 class Certification(SQLModel, table=True):
-    """Certification model for tracking organizational and individual certifications"""
     __tablename__ = "certifications"
-    
-    id: Optional[uuid.UUID] = Field(
-        default_factory=uuid.uuid4, primary_key=True
-    )
-    
-    # Certification Identification
+
+    # Keys
+    id: Optional[uuid.UUID] = Field(default_factory=uuid.uuid4, primary_key=True)
     certificate_number: str = Field(unique=True, max_length=100, index=True)
+
+    # Core data
     name: str = Field(max_length=255, index=True)
     type: CertificationType = Field(index=True)
-    
-    # Issuing Information
+    scope: CertificationScope = Field(index=True)
+
+    # Binding
+    entity_type: Optional[EntityType] = Field(default=None, index=True)
+    entity_id: Optional[str] = Field(default=None, max_length=100, index=True)
+    entity_name: Optional[str] = Field(default=None, max_length=255)
+
+    # Issuing bodies
     issuing_body: str = Field(max_length=255)
     issuing_authority: Optional[str] = Field(default=None, max_length=255)
     accreditation_body: Optional[str] = Field(default=None, max_length=255)
-    
-    # Scope and Applicability
-    scope: CertificationScope = Field(index=True)
-    entity_type: Optional[str] = Field(default=None, max_length=50)  # Employee, Vehicle, etc.
-    entity_id: Optional[str] = Field(default=None, max_length=100, index=True)
-    entity_name: Optional[str] = Field(default=None, max_length=255)
-    
-    # Dates and Validity
+
+    # Validity
     issue_date: date = Field(index=True)
     expiry_date: Optional[date] = Field(default=None, index=True)
     effective_date: Optional[date] = Field(default=None)
-    
-    # Status and Tracking
     status: CertificationStatus = Field(default=CertificationStatus.ACTIVE, index=True)
-    
-    # Documentation
+
+    # Docs
     document_path: Optional[str] = Field(default=None, max_length=500)
     document_url: Optional[str] = Field(default=None, max_length=500)
     verification_url: Optional[str] = Field(default=None, max_length=500)
-    
-    # Requirements and Conditions
-    requirements_met: Optional[str] = Field(default=None, max_length=2000)
-    conditions: Optional[str] = Field(default=None, max_length=1000)
-    restrictions: Optional[str] = Field(default=None, max_length=1000)
-    
-    # Renewal Information
+
+    # Renewal / audit
     renewable: bool = Field(default=True)
     renewal_process: Optional[str] = Field(default=None, max_length=1000)
     renewal_cost: Optional[float] = Field(default=None, ge=0)
     renewal_lead_time_days: Optional[int] = Field(default=None, ge=0)
-    
-    # Audit and Compliance
+    renewal_notes: Optional[str] = Field(default=None, max_length=1000)
     last_audit_date: Optional[date] = Field(default=None)
     next_audit_date: Optional[date] = Field(default=None)
+
+    # Suspension
+    suspension_reason: Optional[str] = Field(default=None, max_length=1000)
+
+    # Book-keeping
     compliance_verified: bool = Field(default=True)
-    
-    # Responsible Parties
-    certificate_holder: Optional[uuid.UUID] = Field(default=None, index=True)
+    created_by: Optional[uuid.UUID] = Field(default=None, index=True)
     responsible_manager: Optional[uuid.UUID] = Field(default=None)
-    
-    # Additional Information
     description: Optional[str] = Field(default=None, max_length=1000)
     notes: Optional[str] = Field(default=None, max_length=2000)
-    
-    # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: Optional[datetime] = Field(default=None)
-    
+
+    # ─────────────── Helper methods ───────────────
     def is_expired(self) -> bool:
-        """Check if certification has expired"""
-        if not self.expiry_date:
-            return False
-        return date.today() > self.expiry_date
-    
+        return bool(self.expiry_date and date.today() > self.expiry_date)
+
     def days_until_expiry(self) -> Optional[int]:
-        """Get days until expiry"""
-        if not self.expiry_date:
-            return None
-        return (self.expiry_date - date.today()).days
-    
+        return None if not self.expiry_date else (self.expiry_date - date.today()).days
+
     def needs_renewal(self, alert_days: int = 60) -> bool:
-        """Check if certification needs renewal within alert period"""
-        if not self.renewable:
-            return False
-        
-        days_left = self.days_until_expiry()
-        if days_left is None:
-            return False
-        return days_left <= alert_days
-    
+        return self.renewable and self.days_until_expiry() is not None and \
+            self.days_until_expiry() <= alert_days
+
     def is_valid(self) -> bool:
-        """Check if certification is currently valid"""
-        return (
-            self.status == CertificationStatus.ACTIVE and
-            not self.is_expired() and
-            self.compliance_verified
-        )
-    
+        return self.status == CertificationStatus.ACTIVE and \
+            not self.is_expired() and self.compliance_verified
+
     def get_validity_period_days(self) -> Optional[int]:
-        """Get total validity period in days"""
         if not self.expiry_date:
             return None
-        
-        start_date = self.effective_date or self.issue_date
-        return (self.expiry_date - start_date).days
-    
+        start = self.effective_date or self.issue_date
+        return (self.expiry_date - start).days
+
     def calculate_renewal_start_date(self) -> Optional[date]:
-        """Calculate when renewal process should start"""
-        if not self.renewable or not self.expiry_date or not self.renewal_lead_time_days:
+        if not (self.renewable and self.expiry_date and self.renewal_lead_time_days):
             return None
-        
-        from datetime import timedelta
         return self.expiry_date - timedelta(days=self.renewal_lead_time_days)

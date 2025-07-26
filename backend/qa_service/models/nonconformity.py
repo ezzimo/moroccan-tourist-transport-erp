@@ -2,7 +2,7 @@
 Non-conformity model for tracking quality issues
 """
 from sqlmodel import SQLModel, Field, Relationship
-from typing import Optional
+from typing import Optional, Dict, Any, List
 from datetime import datetime, date
 from enum import Enum
 import uuid

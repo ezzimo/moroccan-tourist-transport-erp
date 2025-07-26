@@ -1,25 +1,34 @@
 """
 Certification-related Pydantic schemas
 """
+from __future__ import annotations
 from pydantic import BaseModel, validator
-from typing import Optional
+from typing import Optional, Dict, Any, List
 from datetime import datetime, date
-from models.certification import CertificationType, CertificationStatus, CertificationScope
+from models.certification import (
+    CertificationType,
+    CertificationStatus,
+    CertificationScope,
+    EntityType,
+)
 import uuid
 
 
+# ───────────────────────────── Base ─────────────────────────────
 class CertificationBase(BaseModel):
     certificate_number: str
     name: str
     type: CertificationType
     issuing_body: str
+    scope: CertificationScope
+    issue_date: date
+
+    # Optional
     issuing_authority: Optional[str] = None
     accreditation_body: Optional[str] = None
-    scope: CertificationScope
-    entity_type: Optional[str] = None
+    entity_type: Optional[EntityType] = None
     entity_id: Optional[str] = None
     entity_name: Optional[str] = None
-    issue_date: date
     expiry_date: Optional[date] = None
     effective_date: Optional[date] = None
     requirements_met: Optional[str] = None
@@ -35,38 +44,41 @@ class CertificationBase(BaseModel):
     notes: Optional[str] = None
 
 
+# ───────────────────────────── Create ─────────────────────────────
 class CertificationCreate(CertificationBase):
     document_path: Optional[str] = None
     document_url: Optional[str] = None
     verification_url: Optional[str] = None
-    
-    @validator('certificate_number')
-    def validate_certificate_number(cls, v):
+
+    @validator("certificate_number")
+    def _non_empty(cls, v: str) -> str:
         if not v.strip():
-            raise ValueError('Certificate number cannot be empty')
+            raise ValueError("Certificate number cannot be empty.")
         return v.strip()
-    
-    @validator('expiry_date')
-    def validate_expiry_date(cls, v, values):
-        if v and 'issue_date' in values and v <= values['issue_date']:
-            raise ValueError('Expiry date must be after issue date')
+
+    @validator("expiry_date")
+    def _expiry_gt_issue(cls, v: Optional[date], values):
+        if v and v <= values["issue_date"]:
+            raise ValueError("Expiry date must be after issue date.")
         return v
-    
-    @validator('renewal_cost')
-    def validate_renewal_cost(cls, v):
+
+    @validator("renewal_cost")
+    def _renewal_cost_positive(cls, v: Optional[float]):
         if v is not None and v < 0:
-            raise ValueError('Renewal cost cannot be negative')
+            raise ValueError("Renewal cost cannot be negative.")
         return v
 
 
+# ───────────────────────────── Update ─────────────────────────────
 class CertificationUpdate(BaseModel):
+    # every field optional
     name: Optional[str] = None
     type: Optional[CertificationType] = None
     issuing_body: Optional[str] = None
     issuing_authority: Optional[str] = None
     accreditation_body: Optional[str] = None
     scope: Optional[CertificationScope] = None
-    entity_type: Optional[str] = None
+    entity_type: Optional[EntityType] = None
     entity_id: Optional[str] = None
     entity_name: Optional[str] = None
     expiry_date: Optional[date] = None
@@ -89,8 +101,11 @@ class CertificationUpdate(BaseModel):
     responsible_manager: Optional[uuid.UUID] = None
     description: Optional[str] = None
     notes: Optional[str] = None
+    suspension_reason: Optional[str] = None
+    renewal_notes: Optional[str] = None
 
 
+# ───────────────────────────── Read / Response ─────────────────────────────
 class CertificationResponse(CertificationBase):
     id: uuid.UUID
     status: CertificationStatus
@@ -108,6 +123,8 @@ class CertificationResponse(CertificationBase):
     is_valid: bool
     validity_period_days: Optional[int]
     renewal_start_date: Optional[date]
+    suspension_reason: Optional[str]
+    renewal_notes: Optional[str]
 
 
 class CertificationRenewal(BaseModel):

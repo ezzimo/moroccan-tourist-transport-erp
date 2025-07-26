@@ -2,7 +2,7 @@
 Compliance requirement model for regulatory tracking
 """
 from sqlmodel import SQLModel, Field
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from enum import Enum
 import uuid

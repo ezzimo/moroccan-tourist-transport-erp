@@ -7,4 +7,10 @@ from .supplier_service import SupplierService
 from .purchase_order_service import PurchaseOrderService
 from .analytics_service import AnalyticsService
 
-__all__ = ["ItemService", "MovementService", "SupplierService", "PurchaseOrderService", "AnalyticsService"]
+__all__ = [
+    "ItemService",
+    "MovementService",
+    "SupplierService",
+    "PurchaseOrderService",
+    "AnalyticsService",
+]

@@ -11,7 +11,7 @@ from schemas.employee_document import (
 from models.employee_document import DocumentType, DocumentStatus
 from utils.auth import require_permission, CurrentUser
 from utils.pagination import PaginationParams, PaginatedResponse
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uuid
 from datetime import date
 

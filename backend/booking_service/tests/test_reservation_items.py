@@ -3,8 +3,8 @@ Tests for reservation item functionality
 """
 import pytest
 from services.reservation_service import ReservationService
-from schemas.reservation_item import ReservationItemCreate, ReservationItemUpdate
-from models.reservation_item import ItemType
+from schemas.booking import ReservationItemCreate, ReservationItemUpdate
+from models.booking import ItemType
 from models.booking import BookingStatus
 from decimal import Decimal
 

@@ -2,7 +2,7 @@
 Training program-related Pydantic schemas
 """
 from pydantic import BaseModel, validator
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from decimal import Decimal
 from models.training_program import TrainingCategory, TrainingStatus, DeliveryMethod

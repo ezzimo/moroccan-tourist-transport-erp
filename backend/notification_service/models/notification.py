@@ -2,7 +2,7 @@
 Notification model for tracking sent messages
 """
 from sqlmodel import SQLModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from enum import Enum
 import uuid

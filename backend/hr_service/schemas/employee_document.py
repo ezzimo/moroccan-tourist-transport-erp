@@ -2,7 +2,7 @@
 Employee document-related Pydantic schemas
 """
 from pydantic import BaseModel, validator
-from typing import Optional
+from typing import Optional, Dict, Any
 from datetime import datetime, date
 from models.employee_document import DocumentType, DocumentStatus
 import uuid

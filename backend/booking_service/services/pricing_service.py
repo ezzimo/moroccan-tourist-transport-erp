@@ -2,8 +2,8 @@
 Pricing service for dynamic pricing and discount calculations
 """
 from sqlmodel import Session, select
-from models.pricing_rule import PricingRule, DiscountType
-from schemas.pricing_rule import PricingRequest, PricingResponse
+from models.booking import PricingRule, DiscountType
+from schemas.booking import PricingRequest, PricingResponse
 from typing import List, Dict, Any
 from decimal import Decimal
 from datetime import date

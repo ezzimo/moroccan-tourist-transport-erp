@@ -2,7 +2,7 @@
 Employee training model for tracking training participation
 """
 from sqlmodel import SQLModel, Field, Relationship
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from enum import Enum
 import uuid

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends
 from sqlmodel import Session
 from database import get_session
 from services.reservation_service import ReservationService
-from schemas.reservation_item import (
+from schemas.booking import (
     ReservationItemCreate, ReservationItemUpdate, ReservationItemResponse
 )
 from utils.auth import require_permission, CurrentUser

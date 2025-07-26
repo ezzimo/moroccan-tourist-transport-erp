@@ -3,7 +3,7 @@ Training program model for employee development
 """
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, Numeric
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from enum import Enum
 from decimal import Decimal

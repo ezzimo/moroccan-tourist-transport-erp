@@ -2,7 +2,7 @@
 Template-related Pydantic schemas
 """
 from pydantic import BaseModel, validator
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from models.template import TemplateType
 from models.notification import NotificationChannel

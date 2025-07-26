@@ -2,7 +2,7 @@
 Employee document model for document management
 """
 from sqlmodel import SQLModel, Field, Relationship
-from typing import Optional
+from typing import Optional, Dict, Any
 from datetime import datetime, date
 from enum import Enum
 import uuid

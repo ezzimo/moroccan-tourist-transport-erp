@@ -7,4 +7,10 @@ from .training_service import TrainingService
 from .document_service import DocumentService
 from .analytics_service import AnalyticsService
 
-__all__ = ["EmployeeService", "RecruitmentService", "TrainingService", "DocumentService", "AnalyticsService"]
+__all__ = [
+    "EmployeeService", 
+    "RecruitmentService", 
+    "TrainingService", 
+    "DocumentService", 
+    "AnalyticsService"
+]

@@ -1,19 +1,26 @@
 """
 Test configuration and fixtures for booking microservice
 """
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import SQLModel, create_engine, Session
 from main import app
 from database import get_session, get_redis
-from models.booking import Booking, BookingStatus, ServiceType, PaymentStatus
-from models.reservation_item import ReservationItem, ItemType
-from models.pricing_rule import PricingRule, DiscountType
-from models.availability import AvailabilitySlot, ResourceType
+from models.booking import (
+    Booking,
+    ServiceType,
+    ReservationItem,
+    ItemType,
+    PricingRule,
+    DiscountType,
+    AvailabilitySlot,
+    ResourceType,
+)
 import fakeredis
 import os
 import uuid
-from datetime import datetime, date, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 
 
@@ -23,18 +30,17 @@ def session_fixture():
     """Create test database session"""
     # Use in-memory SQLite for testing
     engine = create_engine(
-        "sqlite:///test_booking.db",
-        connect_args={"check_same_thread": False}
+        "sqlite:///test_booking.db", connect_args={"check_same_thread": False}
     )
     SQLModel.metadata.create_all(engine)
-    
+
     with Session(engine) as session:
         yield session
-    
+
     # Clean up
     try:
         os.unlink("test_booking.db")
-    except:
+    except Exception:
         pass
 
 
@@ -47,18 +53,19 @@ def redis_client_fixture():
 @pytest.fixture(name="client")
 def client_fixture(session: Session, redis_client):
     """Create test client with dependency overrides"""
+
     def get_session_override():
         return session
-    
+
     def get_redis_override():
         return redis_client
-    
+
     app.dependency_overrides[get_session] = get_session_override
     app.dependency_overrides[get_redis] = get_redis_override
-    
+
     with TestClient(app) as test_client:
         yield test_client
-    
+
     app.dependency_overrides.clear()
 
 
@@ -75,7 +82,7 @@ def sample_booking_data():
         "start_date": "2024-06-15",
         "end_date": "2024-06-17",
         "base_price": 2000.00,
-        "special_requests": "Vegetarian meals preferred"
+        "special_requests": "Vegetarian meals preferred",
     }
 
 
@@ -88,10 +95,7 @@ def sample_reservation_item_data():
         "description": "Round trip airport transfer",
         "quantity": 1,
         "unit_price": 150.00,
-        "specifications": {
-            "vehicle_type": "SUV",
-            "pickup_time": "08:00"
-        }
+        "specifications": {"vehicle_type": "SUV", "pickup_time": "08:00"},
     }
 
 
@@ -103,14 +107,11 @@ def sample_pricing_rule_data():
         "description": "10% discount for bookings made 30 days in advance",
         "discount_type": "Percentage",
         "discount_percentage": 10.0,
-        "conditions": {
-            "min_advance_days": 30,
-            "service_types": ["Tour"]
-        },
+        "conditions": {"min_advance_days": 30, "service_types": ["Tour"]},
         "valid_from": "2024-01-01",
         "valid_until": "2024-12-31",
         "priority": 1,
-        "is_active": True
+        "is_active": True,
     }
 
 
@@ -124,13 +125,14 @@ def sample_availability_slot_data():
         "date": "2024-06-15",
         "total_capacity": 8,
         "start_time": "2024-06-15T08:00:00",
-        "end_time": "2024-06-15T18:00:00"
+        "end_time": "2024-06-15T18:00:00",
     }
 
 
 @pytest.fixture
 def create_test_booking(session):
     """Factory function to create test bookings"""
+
     def _create_booking(**kwargs):
         default_data = {
             "customer_id": uuid.uuid4(),
@@ -142,22 +144,23 @@ def create_test_booking(session):
             "start_date": date.today() + timedelta(days=7),
             "base_price": Decimal("1000.00"),
             "discount_amount": Decimal("0.00"),
-            "total_price": Decimal("1000.00")
+            "total_price": Decimal("1000.00"),
         }
         default_data.update(kwargs)
-        
+
         booking = Booking(**default_data)
         session.add(booking)
         session.commit()
         session.refresh(booking)
         return booking
-    
+
     return _create_booking
 
 
 @pytest.fixture
 def create_test_reservation_item(session):
     """Factory function to create test reservation items"""
+
     def _create_item(booking_id, **kwargs):
         default_data = {
             "booking_id": booking_id,
@@ -165,22 +168,23 @@ def create_test_reservation_item(session):
             "name": "Test Service",
             "quantity": 1,
             "unit_price": Decimal("100.00"),
-            "total_price": Decimal("100.00")
+            "total_price": Decimal("100.00"),
         }
         default_data.update(kwargs)
-        
+
         item = ReservationItem(**default_data)
         session.add(item)
         session.commit()
         session.refresh(item)
         return item
-    
+
     return _create_item
 
 
 @pytest.fixture
 def create_test_pricing_rule(session):
     """Factory function to create test pricing rules"""
+
     def _create_rule(**kwargs):
         default_data = {
             "name": f"Test Rule {uuid.uuid4().hex[:8]}",
@@ -190,22 +194,23 @@ def create_test_pricing_rule(session):
             "valid_from": date.today(),
             "valid_until": date.today() + timedelta(days=365),
             "priority": 1,
-            "is_active": True
+            "is_active": True,
         }
         default_data.update(kwargs)
-        
+
         rule = PricingRule(**default_data)
         session.add(rule)
         session.commit()
         session.refresh(rule)
         return rule
-    
+
     return _create_rule
 
 
 @pytest.fixture
 def create_test_availability_slot(session):
     """Factory function to create test availability slots"""
+
     def _create_slot(**kwargs):
         default_data = {
             "resource_type": ResourceType.VEHICLE,
@@ -213,16 +218,16 @@ def create_test_availability_slot(session):
             "resource_name": "Test Vehicle",
             "date": date.today() + timedelta(days=7),
             "total_capacity": 8,
-            "available_capacity": 8
+            "available_capacity": 8,
         }
         default_data.update(kwargs)
-        
+
         slot = AvailabilitySlot(**default_data)
         session.add(slot)
         session.commit()
         session.refresh(slot)
         return slot
-    
+
     return _create_slot
 
 
@@ -230,9 +235,15 @@ def create_test_availability_slot(session):
 def mock_auth_user():
     """Mock authenticated user for testing"""
     from utils.auth import CurrentUser
+
     return CurrentUser(
         user_id=uuid.uuid4(),
         email="test@example.com",
         full_name="Test User",
-        permissions=["booking:create:*", "booking:read:*", "booking:update:*", "booking:delete:*"]
+        permissions=[
+            "booking:create:*",
+            "booking:read:*",
+            "booking:update:*",
+            "booking:delete:*",
+        ],
     )

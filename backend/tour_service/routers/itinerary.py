@@ -1,7 +1,7 @@
 """
 Itinerary management routes
 """
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Path
 from sqlmodel import Session
 from database import get_session, get_redis
 from services.itinerary_service import ItineraryService
@@ -95,7 +95,7 @@ async def get_tour_itinerary(
 @router.get("/tour/{tour_instance_id}/day/{day_number}", response_model=ItineraryDayResponse)
 async def get_day_itinerary(
     tour_instance_id: uuid.UUID,
-    day_number: int = Query(..., ge=1, description="Day number"),
+    day_number: int = Path(..., ge=1, description="Day number"),
     session: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
     current_user: CurrentUser = Depends(require_permission("tours", "read", "itinerary"))
@@ -108,7 +108,7 @@ async def get_day_itinerary(
 @router.post("/tour/{tour_instance_id}/day/{day_number}/reorder", response_model=List[ItineraryItemResponse])
 async def reorder_day_items(
     tour_instance_id: uuid.UUID,
-    day_number: int = Query(..., ge=1, description="Day number"),
+    day_number: int = Path(..., ge=1, description="Day number"),
     item_order: List[uuid.UUID] = Query(..., description="Ordered list of item IDs"),
     session: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),

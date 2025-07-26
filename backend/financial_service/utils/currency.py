@@ -2,7 +2,7 @@
 Currency conversion utilities
 """
 from decimal import Decimal
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 import httpx
 import redis
 from datetime import datetime, timedelta

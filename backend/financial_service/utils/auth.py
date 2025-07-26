@@ -5,7 +5,7 @@ from fastapi import Depends, HTTPException, status, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from config import settings
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import httpx
 import uuid
 

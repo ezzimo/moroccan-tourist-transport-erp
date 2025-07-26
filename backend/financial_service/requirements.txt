@@ -1,17 +1,37 @@
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-sqlmodel==0.0.14
-psycopg2-binary==2.9.9
-redis==5.0.1
-python-jose[cryptography]==3.3.0
-pydantic[email]==2.5.0
-pydantic-settings==2.1.0
-pytest==7.4.3
-pytest-asyncio==0.21.1
-httpx==0.25.2
-fakeredis==2.20.1
-python-multipart==0.0.6
-reportlab==4.0.7
-openpyxl==3.1.2
-celery==5.3.4
-python-dateutil==2.8.2
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+sqlmodel>=0.0.14
+psycopg2-binary>=2.9.9
+redis>=5.0.1
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+python-multipart>=0.0.6
+pydantic[email]>=2.5.0
+pydantic-settings>=2.1.0
+pytest>=7.4.3
+pytest-asyncio>=0.21.1
+httpx>=0.25.2
+fakeredis>=2.20.1
+
+# Financial service specific dependencies
+reportlab>=4.0.7
+openpyxl>=3.1.2
+pandas>=2.1.4
+numpy>=1.25.2
+python-dateutil>=2.8.2
+Pillow>=10.1.0
+
+# Currency and financial calculations
+forex-python>=1.8
+
+# PDF and document processing
+PyPDF2>=3.0.1
+python-docx>=1.1.0
+
+# Email and notifications
+emails>=0.6.0
+jinja2>=3.1.2
+
+# Validation and utilities
+phonenumbers>=8.13.26
+python-slugify>=8.0.1

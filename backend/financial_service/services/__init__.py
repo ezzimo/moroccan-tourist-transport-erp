@@ -7,4 +7,10 @@ from .expense_service import ExpenseService
 from .tax_service import TaxService
 from .analytics_service import AnalyticsService
 
-__all__ = ["InvoiceService", "PaymentService", "ExpenseService", "TaxService", "AnalyticsService"]
+__all__ = [
+    "InvoiceService",
+    "PaymentService", 
+    "ExpenseService",
+    "TaxService",
+    "AnalyticsService"
+]

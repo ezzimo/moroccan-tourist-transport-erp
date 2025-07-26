@@ -17,7 +17,7 @@ from models.training_program import TrainingCategory, TrainingStatus, DeliveryMe
 from models.employee_training import AttendanceStatus, CompletionStatus
 from utils.auth import require_permission, CurrentUser
 from utils.pagination import PaginationParams, PaginatedResponse
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import redis
 import uuid
 

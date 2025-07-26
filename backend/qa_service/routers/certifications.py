@@ -3,7 +3,7 @@ Certification management routes
 """
 from fastapi import APIRouter, Depends, Query, UploadFile, File, Form
 from sqlmodel import Session
-from database import get_session, get_redis
+from database import get_session
 from services.certification_service import CertificationService
 from schemas.certification import (
     CertificationCreate, CertificationUpdate, CertificationResponse,
@@ -12,7 +12,7 @@ from schemas.certification import (
 from models.certification import CertificationType, CertificationStatus, CertificationScope
 from utils.auth import require_permission, CurrentUser
 from utils.pagination import PaginationParams, PaginatedResponse
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import redis
 import uuid
 from datetime import date
@@ -25,12 +25,15 @@ router = APIRouter(prefix="/certifications", tags=["Certification Management"])
 async def create_certification(
     certification_data: CertificationCreate,
     session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(require_permission("qa", "create", "certifications"))
+    current_user: CurrentUser = Depends(
+        require_permission(
+            "qa", "create", "certifications"
+        )
+    )
 ):
     """Create a new certification"""
-    certification_service = CertificationService(session, redis_client)
-    return await certification_service.create_certification(certification_data)
+    certification_service = CertificationService(session)
+    return await certification_service.create_certification(certification_data, current_user.id)
 
 
 @router.post("/upload", response_model=CertificationResponse)
@@ -48,11 +51,10 @@ async def create_certification_with_upload(
     description: Optional[str] = Form(None),
     certificate_file: Optional[UploadFile] = File(None),
     session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis),
     current_user: CurrentUser = Depends(require_permission("qa", "create", "certifications"))
 ):
     """Create certification with file upload"""
-    certification_service = CertificationService(session, redis_client)
+    certification_service = CertificationService(session)
     
     # Parse dates
     from datetime import datetime
@@ -92,7 +94,7 @@ async def create_certification_with_upload(
     )
     
     return await certification_service.create_certification_with_file(
-        certification_data, certificate_file
+        certification_data, certificate_file, current_user.id
     )
 
 
@@ -110,11 +112,10 @@ async def get_certifications(
     expiring_soon: Optional[bool] = Query(None, description="Show expiring certifications"),
     needs_renewal: Optional[bool] = Query(None, description="Show certifications needing renewal"),
     session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis),
     current_user: CurrentUser = Depends(require_permission("qa", "read", "certifications"))
 ):
     """Get list of certifications with optional search and filters"""
-    certification_service = CertificationService(session, redis_client)
+    certification_service = CertificationService(session)
     
     # Build search criteria
     search = None
@@ -132,9 +133,13 @@ async def get_certifications(
             expiring_soon=expiring_soon,
             needs_renewal=needs_renewal
         )
-    
-    certifications, total = await certification_service.get_certifications(pagination, search)
-    
+
+    certifications, total = await certification_service.get_certifications(
+        pagination,
+        search,
+        current_user.id,
+    )
+
     return PaginatedResponse.create(
         items=certifications,
         total=total,
@@ -146,36 +151,33 @@ async def get_certifications(
 @router.get("/summary", response_model=CertificationSummary)
 async def get_certification_summary(
     session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis),
     current_user: CurrentUser = Depends(require_permission("qa", "read", "certifications"))
 ):
     """Get certification summary statistics"""
-    certification_service = CertificationService(session, redis_client)
-    return await certification_service.get_certification_summary()
+    certification_service = CertificationService(session)
+    return await certification_service.get_certification_summary(current_user.id)
 
 
 @router.get("/expiring", response_model=List[CertificationResponse])
 async def get_expiring_certifications(
     days_ahead: int = Query(60, ge=1, le=365, description="Days ahead to check"),
     session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis),
     current_user: CurrentUser = Depends(require_permission("qa", "read", "certifications"))
 ):
     """Get certifications expiring within specified days"""
-    certification_service = CertificationService(session, redis_client)
-    return await certification_service.get_expiring_certifications(days_ahead)
+    certification_service = CertificationService(session)
+    return await certification_service.get_expiring_certifications(days_ahead, current_user.id)
 
 
 @router.get("/{certification_id}", response_model=CertificationResponse)
 async def get_certification(
     certification_id: uuid.UUID,
     session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis),
     current_user: CurrentUser = Depends(require_permission("qa", "read", "certifications"))
 ):
     """Get certification by ID"""
-    certification_service = CertificationService(session, redis_client)
-    return await certification_service.get_certification(certification_id)
+    certification_service = CertificationService(session)
+    return await certification_service.get_certification(certification_id, current_user.id)
 
 
 @router.put("/{certification_id}", response_model=CertificationResponse)
@@ -183,12 +185,15 @@ async def update_certification(
     certification_id: uuid.UUID,
     certification_data: CertificationUpdate,
     session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis),
     current_user: CurrentUser = Depends(require_permission("qa", "update", "certifications"))
 ):
     """Update certification information"""
-    certification_service = CertificationService(session, redis_client)
-    return await certification_service.update_certification(certification_id, certification_data)
+    certification_service = CertificationService(sessiont)
+    return await certification_service.update_certification(
+        certification_id,
+        certification_data,
+        current_user.id,
+    )
 
 
 @router.post("/{certification_id}/renew", response_model=CertificationResponse)
@@ -196,34 +201,62 @@ async def renew_certification(
     certification_id: uuid.UUID,
     renewal_data: CertificationRenewal,
     session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(require_permission("qa", "update", "certifications"))
+    current_user: CurrentUser = Depends(
+        require_permission(
+            "qa",
+            "update",
+            "certifications",
+        )
+    )
 ):
     """Renew a certification"""
-    certification_service = CertificationService(session, redis_client)
-    return await certification_service.renew_certification(certification_id, renewal_data)
+    certification_service = CertificationService(session)
+    return await certification_service.renew_certification(
+        certification_id,
+        renewal_data,
+        current_user.id
+    )
 
 
 @router.delete("/{certification_id}")
 async def delete_certification(
     certification_id: uuid.UUID,
     session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(require_permission("qa", "delete", "certifications"))
+    current_user: CurrentUser = Depends(
+        require_permission(
+            "qa",
+            "delete",
+            "certifications",
+        )
+    )
 ):
     """Delete certification"""
-    certification_service = CertificationService(session, redis_client)
-    return await certification_service.delete_certification(certification_id)
+    certification_service = CertificationService(session)
+    return await certification_service.delete_certification(
+        certification_id, current_user.id
+    )
 
 
-@router.get("/entity/{entity_type}/{entity_id}", response_model=List[CertificationResponse])
+@router.get(
+    "/entity/{entity_type}/{entity_id}",
+    response_model=List[CertificationResponse],
+)
 async def get_entity_certifications(
     entity_type: str,
     entity_id: str,
     session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(require_permission("qa", "read", "certifications"))
+    current_user: CurrentUser = Depends(
+        require_permission(
+            "qa",
+            "read",
+            "certifications",
+        )
+    )
 ):
     """Get all certifications for a specific entity"""
-    certification_service = CertificationService(session, redis_client)
-    return await certification_service.get_entity_certifications(entity_type, entity_id)
+    certification_service = CertificationService(session)
+    return await certification_service.get_entity_certifications(
+        entity_type,
+        entity_id,
+        current_user.id,
+    )

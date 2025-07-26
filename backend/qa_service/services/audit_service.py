@@ -1,131 +1,199 @@
 """
-Audit service for quality audit management
+Audit service for quality audit management operations
 """
 from sqlmodel import Session, select, and_, or_, func
 from fastapi import HTTPException, status
-from models.quality_audit import QualityAudit, AuditStatus
+from models.quality_audit import QualityAudit, AuditStatus, EntityType
+from models.nonconformity import NonConformity, Severity, NCStatus
 from schemas.quality_audit import (
-    QualityAuditCreate, QualityAuditUpdate, QualityAuditResponse,
-    AuditSummary, AuditSearch, AuditResponse
+    QualityAuditCreate, QualityAuditUpdate, QualityAuditResponse
 )
-from utils.pagination import PaginationParams, paginate_query
-from typing import List, Optional, Tuple
+from schemas.nonconformity import (
+    NonConformityCreate, NonConformityUpdate, NonConformityResponse
+)
+from utils.notifications import send_audit_notification, send_nonconformity_alert
+from utils.validation import validate_audit_data, validate_checklist
+from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timedelta
-import redis
 import uuid
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class AuditService:
-    """Service for handling audit operations"""
+    """Service for handling quality audit operations"""
     
-    def __init__(self, session: Session, redis_client: redis.Redis):
+    def __init__(self, session: Session):
         self.session = session
-        self.redis = redis_client
     
-    async def create_audit(self, audit_data: QualityAuditCreate) -> QualityAuditResponse:
-        """Create a new quality audit"""
+    async def create_audit(
+        self, 
+        audit_data: QualityAuditCreate, 
+        auditor_id: uuid.UUID
+    ) -> QualityAuditResponse:
+        """Create a new quality audit
+        
+        Args:
+            audit_data: Audit creation data
+            auditor_id: User ID of the auditor
+            
+        Returns:
+            Created audit
+            
+        Raises:
+            HTTPException: If validation fails
+        """
+        # Validate audit data
+        validation_errors = validate_audit_data(audit_data.model_dump())
+        if validation_errors:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"message": "Validation failed", "errors": validation_errors}
+            )
+        
+        # Validate checklist format
+        if audit_data.checklist:
+            checklist_errors = validate_checklist(audit_data.checklist)
+            if checklist_errors:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail={"message": "Invalid checklist format", "errors": checklist_errors}
+                )
+        
         # Generate audit number
         audit_number = await self._generate_audit_number()
         
         # Create audit
         audit = QualityAudit(
+            **audit_data.model_dump(),
+            auditor_id=auditor_id,
             audit_number=audit_number,
-            title=audit_data.title,
-            entity_type=audit_data.entity_type,
-            entity_id=audit_data.entity_id,
-            entity_name=audit_data.entity_name,
-            audit_type=audit_data.audit_type,
-            auditor_id=audit_data.auditor_id,
-            auditor_name=audit_data.auditor_name,
-            external_auditor=audit_data.external_auditor,
-            scheduled_date=audit_data.scheduled_date,
-            pass_score=audit_data.pass_score
+            status=AuditStatus.SCHEDULED
         )
-        
-        # Set checklist
-        audit.set_checklist_dict(audit_data.checklist)
         
         self.session.add(audit)
         self.session.commit()
         self.session.refresh(audit)
         
-        return self._create_audit_response(audit)
+        # Send notification
+        try:
+            await send_audit_notification(
+                audit_id=str(audit.id),
+                audit_data={
+                    "audit_number": audit.audit_number,
+                    "entity_type": audit.entity_type.value,
+                    "scheduled_date": audit.scheduled_date.isoformat(),
+                    "auditor_id": str(auditor_id)
+                },
+                notification_type="audit_scheduled"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send audit notification: {str(e)}")
+        
+        logger.info(f"Created audit {audit.audit_number}")
+        return self._to_response(audit)
     
     async def get_audit(self, audit_id: uuid.UUID) -> QualityAuditResponse:
-        """Get audit by ID"""
-        statement = select(QualityAudit).where(QualityAudit.id == audit_id)
-        audit = self.session.exec(statement).first()
+        """Get audit by ID
         
+        Args:
+            audit_id: Audit UUID
+            
+        Returns:
+            Audit details
+            
+        Raises:
+            HTTPException: If audit not found
+        """
+        audit = self.session.get(QualityAudit, audit_id)
         if not audit:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Audit not found"
             )
         
-        return self._create_audit_response(audit)
+        return self._to_response(audit)
     
     async def get_audits(
-        self, 
-        pagination: PaginationParams,
-        search: Optional[AuditSearch] = None
-    ) -> Tuple[List[QualityAuditResponse], int]:
-        """Get list of audits with optional search"""
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        entity_type: Optional[EntityType] = None,
+        status: Optional[AuditStatus] = None,
+        auditor_id: Optional[uuid.UUID] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        overdue_only: bool = False
+    ) -> List[QualityAuditResponse]:
+        """Get audits with filtering
+        
+        Args:
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+            entity_type: Filter by entity type
+            status: Filter by audit status
+            auditor_id: Filter by auditor
+            start_date: Filter audits from this date
+            end_date: Filter audits until this date
+            overdue_only: Show only overdue audits
+            
+        Returns:
+            List of audits
+        """
         query = select(QualityAudit)
         
-        # Apply search filters
-        if search:
-            conditions = []
-            
-            if search.query:
-                search_term = f"%{search.query}%"
-                conditions.append(
-                    or_(
-                        QualityAudit.title.ilike(search_term),
-                        QualityAudit.audit_number.ilike(search_term),
-                        QualityAudit.entity_name.ilike(search_term),
-                        QualityAudit.auditor_name.ilike(search_term)
-                    )
-                )
-            
-            if search.entity_type:
-                conditions.append(QualityAudit.entity_type == search.entity_type)
-            
-            if search.audit_type:
-                conditions.append(QualityAudit.audit_type == search.audit_type)
-            
-            if search.status:
-                conditions.append(QualityAudit.status == search.status)
-            
-            if search.auditor_id:
-                conditions.append(QualityAudit.auditor_id == search.auditor_id)
-            
-            if search.scheduled_from:
-                conditions.append(QualityAudit.scheduled_date >= search.scheduled_from)
-            
-            if search.scheduled_to:
-                conditions.append(QualityAudit.scheduled_date <= search.scheduled_to)
-            
-            if search.outcome:
-                conditions.append(QualityAudit.outcome == search.outcome)
-            
-            if search.requires_follow_up is not None:
-                conditions.append(QualityAudit.requires_follow_up == search.requires_follow_up)
-            
-            if conditions:
-                query = query.where(and_(*conditions))
+        # Apply filters
+        conditions = []
         
-        # Order by scheduled date (newest first)
-        query = query.order_by(QualityAudit.scheduled_date.desc())
+        if entity_type:
+            conditions.append(QualityAudit.entity_type == entity_type)
         
-        audits, total = paginate_query(self.session, query, pagination)
+        if status:
+            conditions.append(QualityAudit.status == status)
         
-        return [self._create_audit_response(audit) for audit in audits], total
+        if auditor_id:
+            conditions.append(QualityAudit.auditor_id == auditor_id)
+        
+        if start_date:
+            conditions.append(QualityAudit.scheduled_date >= start_date)
+        
+        if end_date:
+            conditions.append(QualityAudit.scheduled_date <= end_date)
+        
+        if overdue_only:
+            conditions.extend([
+                QualityAudit.scheduled_date < date.today(),
+                QualityAudit.status.in_([AuditStatus.SCHEDULED, AuditStatus.IN_PROGRESS])
+            ])
+        
+        if conditions:
+            query = query.where(and_(*conditions))
+        
+        query = query.order_by(QualityAudit.scheduled_date.desc()).offset(skip).limit(limit)
+        audits = self.session.exec(query).all()
+        
+        return [self._to_response(audit) for audit in audits]
     
-    async def update_audit(self, audit_id: uuid.UUID, audit_data: QualityAuditUpdate) -> QualityAuditResponse:
-        """Update audit information"""
-        statement = select(QualityAudit).where(QualityAudit.id == audit_id)
-        audit = self.session.exec(statement).first()
+    async def update_audit(
+        self, 
+        audit_id: uuid.UUID, 
+        audit_data: QualityAuditUpdate
+    ) -> QualityAuditResponse:
+        """Update audit information
         
+        Args:
+            audit_id: Audit UUID
+            audit_data: Update data
+            
+        Returns:
+            Updated audit
+            
+        Raises:
+            HTTPException: If audit not found
+        """
+        audit = self.session.get(QualityAudit, audit_id)
         if not audit:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -133,16 +201,19 @@ class AuditService:
             )
         
         # Update fields
-        update_data = audit_data.model_dump(exclude_unset=True, exclude={"checklist_responses"})
+        update_data = audit_data.model_dump(exclude_unset=True)
+        
+        # Validate checklist if provided
+        if "checklist" in update_data and update_data["checklist"]:
+            checklist_errors = validate_checklist(update_data["checklist"])
+            if checklist_errors:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail={"message": "Invalid checklist format", "errors": checklist_errors}
+                )
         
         for field, value in update_data.items():
             setattr(audit, field, value)
-        
-        # Handle checklist responses separately
-        if audit_data.checklist_responses is not None:
-            audit.set_responses_dict(audit_data.checklist_responses)
-            # Recalculate score if responses provided
-            audit.total_score = audit.calculate_score()
         
         audit.updated_at = datetime.utcnow()
         
@@ -150,13 +221,22 @@ class AuditService:
         self.session.commit()
         self.session.refresh(audit)
         
-        return self._create_audit_response(audit)
+        logger.info(f"Updated audit {audit.audit_number}")
+        return self._to_response(audit)
     
-    async def start_audit(self, audit_id: uuid.UUID, auditor_id: uuid.UUID) -> QualityAuditResponse:
-        """Start an audit"""
-        statement = select(QualityAudit).where(QualityAudit.id == audit_id)
-        audit = self.session.exec(statement).first()
+    async def start_audit(self, audit_id: uuid.UUID) -> dict:
+        """Start an audit
         
+        Args:
+            audit_id: Audit UUID
+            
+        Returns:
+            Success message
+            
+        Raises:
+            HTTPException: If audit not found or cannot be started
+        """
+        audit = self.session.get(QualityAudit, audit_id)
         if not audit:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -166,30 +246,41 @@ class AuditService:
         if audit.status != AuditStatus.SCHEDULED:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only scheduled audits can be started"
+                detail=f"Cannot start audit with status {audit.status}"
             )
         
-        # Update audit status
         audit.status = AuditStatus.IN_PROGRESS
-        audit.start_date = datetime.utcnow()
+        audit.actual_date = date.today()
         audit.updated_at = datetime.utcnow()
         
         self.session.add(audit)
         self.session.commit()
-        self.session.refresh(audit)
         
-        return self._create_audit_response(audit)
+        logger.info(f"Started audit {audit.audit_number}")
+        return {"message": "Audit started successfully"}
     
     async def complete_audit(
-        self, 
-        audit_id: uuid.UUID, 
-        responses: AuditResponse,
-        auditor_id: uuid.UUID
-    ) -> QualityAuditResponse:
-        """Complete an audit with responses"""
-        statement = select(QualityAudit).where(QualityAudit.id == audit_id)
-        audit = self.session.exec(statement).first()
+        self,
+        audit_id: uuid.UUID,
+        score: Optional[float] = None,
+        outcome: Optional[str] = None,
+        remarks: Optional[str] = None
+    ) -> dict:
+        """Complete an audit
         
+        Args:
+            audit_id: Audit UUID
+            score: Audit score (0-100)
+            outcome: Audit outcome
+            remarks: Final remarks
+            
+        Returns:
+            Success message
+            
+        Raises:
+            HTTPException: If audit not found or cannot be completed
+        """
+        audit = self.session.get(QualityAudit, audit_id)
         if not audit:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -199,201 +290,361 @@ class AuditService:
         if audit.status != AuditStatus.IN_PROGRESS:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Only in-progress audits can be completed"
+                detail=f"Cannot complete audit with status {audit.status}"
             )
         
-        # Set responses and calculate score
-        audit.set_responses_dict(responses.responses)
-        audit.total_score = audit.calculate_score()
+        if score is not None and not (0 <= score <= 100):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Score must be between 0 and 100"
+            )
         
-        # Determine outcome
-        if audit.is_passed():
-            audit.outcome = "Pass"
-        else:
-            audit.outcome = "Fail"
-            audit.requires_follow_up = True
-            # Schedule follow-up audit in 30 days
-            audit.follow_up_date = date.today() + timedelta(days=30)
-        
-        # Update status and completion
         audit.status = AuditStatus.COMPLETED
-        audit.completion_date = datetime.utcnow()
+        audit.score = score
+        audit.outcome = outcome
+        audit.remarks = remarks
+        audit.completed_date = date.today()
         audit.updated_at = datetime.utcnow()
         
         self.session.add(audit)
         self.session.commit()
-        self.session.refresh(audit)
         
-        return self._create_audit_response(audit)
+        logger.info(f"Completed audit {audit.audit_number} with score {score}")
+        return {"message": "Audit completed successfully"}
     
-    async def delete_audit(self, audit_id: uuid.UUID) -> dict:
-        """Delete audit"""
-        statement = select(QualityAudit).where(QualityAudit.id == audit_id)
-        audit = self.session.exec(statement).first()
+    async def cancel_audit(self, audit_id: uuid.UUID, reason: Optional[str] = None) -> dict:
+        """Cancel an audit
         
+        Args:
+            audit_id: Audit UUID
+            reason: Cancellation reason
+            
+        Returns:
+            Success message
+            
+        Raises:
+            HTTPException: If audit not found or cannot be cancelled
+        """
+        audit = self.session.get(QualityAudit, audit_id)
         if not audit:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Audit not found"
             )
         
-        # Check if audit can be deleted
-        if audit.status in [AuditStatus.IN_PROGRESS, AuditStatus.COMPLETED]:
+        if audit.status in [AuditStatus.COMPLETED, AuditStatus.CANCELLED]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot delete in-progress or completed audits"
+                detail=f"Cannot cancel audit with status {audit.status}"
             )
         
-        self.session.delete(audit)
+        audit.status = AuditStatus.CANCELLED
+        if reason:
+            audit.remarks = f"Cancelled: {reason}"
+        audit.updated_at = datetime.utcnow()
+        
+        self.session.add(audit)
         self.session.commit()
         
-        return {"message": "Audit deleted successfully"}
+        logger.info(f"Cancelled audit {audit.audit_number}")
+        return {"message": "Audit cancelled successfully"}
     
-    async def get_audit_summary(self, days: int = 90) -> AuditSummary:
-        """Get audit summary statistics"""
-        start_date = date.today() - timedelta(days=days)
+    async def create_nonconformity(
+        self,
+        audit_id: uuid.UUID,
+        nonconformity_data: NonConformityCreate,
+        created_by: uuid.UUID
+    ) -> NonConformityResponse:
+        """Create a non-conformity for an audit
         
-        # Total audits
-        total_stmt = select(func.count(QualityAudit.id)).where(
-            QualityAudit.scheduled_date >= start_date
-        )
-        total_audits = self.session.exec(total_stmt).one()
-        
-        # By status
-        status_stmt = select(
-            QualityAudit.status, func.count(QualityAudit.id)
-        ).where(
-            QualityAudit.scheduled_date >= start_date
-        ).group_by(QualityAudit.status)
-        
-        by_status = {}
-        for status_val, count in self.session.exec(status_stmt):
-            by_status[status_val.value] = count
-        
-        # By entity type
-        entity_stmt = select(
-            QualityAudit.entity_type, func.count(QualityAudit.id)
-        ).where(
-            QualityAudit.scheduled_date >= start_date
-        ).group_by(QualityAudit.entity_type)
-        
-        by_entity_type = {}
-        for entity_type, count in self.session.exec(entity_stmt):
-            by_entity_type[entity_type.value] = count
-        
-        # By outcome
-        outcome_stmt = select(
-            QualityAudit.outcome, func.count(QualityAudit.id)
-        ).where(
-            and_(
-                QualityAudit.scheduled_date >= start_date,
-                QualityAudit.outcome.is_not(None)
+        Args:
+            audit_id: Audit UUID
+            nonconformity_data: Non-conformity data
+            created_by: User who created the non-conformity
+            
+        Returns:
+            Created non-conformity
+            
+        Raises:
+            HTTPException: If audit not found
+        """
+        # Verify audit exists
+        audit = self.session.get(QualityAudit, audit_id)
+        if not audit:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Audit not found"
             )
-        ).group_by(QualityAudit.outcome)
         
-        by_outcome = {}
-        for outcome, count in self.session.exec(outcome_stmt):
-            by_outcome[outcome] = count
+        # Generate NC number
+        nc_number = await self._generate_nc_number()
         
-        # Average score
-        avg_score_stmt = select(func.avg(QualityAudit.total_score)).where(
-            and_(
-                QualityAudit.scheduled_date >= start_date,
-                QualityAudit.total_score.is_not(None)
-            )
+        # Create non-conformity
+        nonconformity = NonConformity(
+            **nonconformity_data.model_dump(),
+            audit_id=audit_id,
+            nc_number=nc_number,
+            created_by=created_by,
+            status=NCStatus.OPEN
         )
-        average_score = self.session.exec(avg_score_stmt).one() or 0.0
         
-        # Pass rate
-        passed_count = by_outcome.get("Pass", 0)
-        total_completed = sum(by_outcome.values())
-        pass_rate = (passed_count / total_completed * 100) if total_completed > 0 else 0.0
+        self.session.add(nonconformity)
+        self.session.commit()
+        self.session.refresh(nonconformity)
         
-        # Overdue audits
-        overdue_stmt = select(func.count(QualityAudit.id)).where(
-            and_(
-                QualityAudit.status.in_([AuditStatus.SCHEDULED, AuditStatus.IN_PROGRESS]),
-                QualityAudit.scheduled_date < date.today()
-            )
-        )
-        overdue_audits = self.session.exec(overdue_stmt).one()
+        # Send alert for critical non-conformities
+        if nonconformity.severity == Severity.CRITICAL:
+            try:
+                await send_nonconformity_alert(
+                    nonconformity_id=str(nonconformity.id),
+                    nonconformity_data={
+                        "nc_number": nonconformity.nc_number,
+                        "severity": nonconformity.severity.value,
+                        "description": nonconformity.description,
+                        "audit_number": audit.audit_number
+                    },
+                    notification_type="critical_nonconformity"
+                )
+            except Exception as e:
+                logger.error(f"Failed to send non-conformity alert: {str(e)}")
         
-        # Upcoming audits (next 30 days)
-        upcoming_date = date.today() + timedelta(days=30)
-        upcoming_stmt = select(func.count(QualityAudit.id)).where(
-            and_(
-                QualityAudit.status == AuditStatus.SCHEDULED,
-                QualityAudit.scheduled_date.between(date.today(), upcoming_date)
-            )
-        )
-        upcoming_audits = self.session.exec(upcoming_stmt).one()
-        
-        return AuditSummary(
-            total_audits=total_audits,
-            by_status=by_status,
-            by_entity_type=by_entity_type,
-            by_outcome=by_outcome,
-            average_score=float(average_score),
-            pass_rate=pass_rate,
-            overdue_audits=overdue_audits,
-            upcoming_audits=upcoming_audits
-        )
+        logger.info(f"Created non-conformity {nonconformity.nc_number}")
+        return self._nc_to_response(nonconformity)
     
-    async def get_overdue_audits(self) -> List[QualityAuditResponse]:
-        """Get all overdue audits"""
-        statement = select(QualityAudit).where(
-            and_(
-                QualityAudit.status.in_([AuditStatus.SCHEDULED, AuditStatus.IN_PROGRESS]),
-                QualityAudit.scheduled_date < date.today()
+    async def get_audit_nonconformities(self, audit_id: uuid.UUID) -> List[NonConformityResponse]:
+        """Get non-conformities for an audit
+        
+        Args:
+            audit_id: Audit UUID
+            
+        Returns:
+            List of non-conformities
+        """
+        query = select(NonConformity).where(NonConformity.audit_id == audit_id)
+        query = query.order_by(NonConformity.created_at.desc())
+        
+        nonconformities = self.session.exec(query).all()
+        return [self._nc_to_response(nc) for nc in nonconformities]
+    
+    async def update_nonconformity(
+        self,
+        nc_id: uuid.UUID,
+        nc_data: NonConformityUpdate
+    ) -> NonConformityResponse:
+        """Update non-conformity
+        
+        Args:
+            nc_id: Non-conformity UUID
+            nc_data: Update data
+            
+        Returns:
+            Updated non-conformity
+            
+        Raises:
+            HTTPException: If non-conformity not found
+        """
+        nonconformity = self.session.get(NonConformity, nc_id)
+        if not nonconformity:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Non-conformity not found"
             )
-        ).order_by(QualityAudit.scheduled_date)
         
-        audits = self.session.exec(statement).all()
+        # Update fields
+        update_data = nc_data.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            setattr(nonconformity, field, value)
         
-        return [self._create_audit_response(audit) for audit in audits]
+        nonconformity.updated_at = datetime.utcnow()
+        
+        self.session.add(nonconformity)
+        self.session.commit()
+        self.session.refresh(nonconformity)
+        
+        logger.info(f"Updated non-conformity {nonconformity.nc_number}")
+        return self._nc_to_response(nonconformity)
+    
+    async def resolve_nonconformity(
+        self,
+        nc_id: uuid.UUID,
+        resolution_notes: str,
+        resolved_by: uuid.UUID
+    ) -> dict:
+        """Resolve a non-conformity
+        
+        Args:
+            nc_id: Non-conformity UUID
+            resolution_notes: Resolution description
+            resolved_by: User who resolved it
+            
+        Returns:
+            Success message
+            
+        Raises:
+            HTTPException: If non-conformity not found
+        """
+        nonconformity = self.session.get(NonConformity, nc_id)
+        if not nonconformity:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Non-conformity not found"
+            )
+        
+        nonconformity.status = NCStatus.RESOLVED
+        nonconformity.resolution_notes = resolution_notes
+        nonconformity.resolved_by = resolved_by
+        nonconformity.resolved_date = date.today()
+        nonconformity.updated_at = datetime.utcnow()
+        
+        self.session.add(nonconformity)
+        self.session.commit()
+        
+        logger.info(f"Resolved non-conformity {nonconformity.nc_number}")
+        return {"message": "Non-conformity resolved successfully"}
+    
+    async def get_audit_analytics(
+        self,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        entity_type: Optional[EntityType] = None
+    ) -> Dict[str, Any]:
+        """Get audit analytics
+        
+        Args:
+            start_date: Analytics start date
+            end_date: Analytics end date
+            entity_type: Filter by entity type
+            
+        Returns:
+            Analytics data
+        """
+        query = select(QualityAudit)
+        
+        conditions = []
+        if start_date:
+            conditions.append(QualityAudit.scheduled_date >= start_date)
+        if end_date:
+            conditions.append(QualityAudit.scheduled_date <= end_date)
+        if entity_type:
+            conditions.append(QualityAudit.entity_type == entity_type)
+        
+        if conditions:
+            query = query.where(and_(*conditions))
+        
+        audits = self.session.exec(query).all()
+        
+        # Calculate metrics
+        total_audits = len(audits)
+        completed_audits = len([a for a in audits if a.status == AuditStatus.COMPLETED])
+        overdue_audits = len([a for a in audits if a.is_overdue()])
+        
+        # Score analysis
+        scores = [a.score for a in audits if a.score is not None]
+        average_score = sum(scores) / len(scores) if scores else None
+        
+        # Non-conformities
+        nc_query = select(NonConformity).join(QualityAudit)
+        if conditions:
+            nc_query = nc_query.where(and_(*conditions))
+        
+        nonconformities = self.session.exec(nc_query).all()
+        total_ncs = len(nonconformities)
+        critical_ncs = len([nc for nc in nonconformities if nc.severity == Severity.CRITICAL])
+        
+        return {
+            "total_audits": total_audits,
+            "completed_audits": completed_audits,
+            "overdue_audits": overdue_audits,
+            "completion_rate": completed_audits / total_audits * 100 if total_audits > 0 else 0,
+            "average_score": average_score,
+            "total_nonconformities": total_ncs,
+            "critical_nonconformities": critical_ncs,
+            "period": {
+                "start_date": start_date.isoformat() if start_date else None,
+                "end_date": end_date.isoformat() if end_date else None
+            }
+        }
     
     async def _generate_audit_number(self) -> str:
         """Generate unique audit number"""
-        year = date.today().year
+        today = date.today()
+        prefix = f"AUD-{today.strftime('%Y%m')}"
         
-        # Get count of audits this year
-        count_stmt = select(func.count(QualityAudit.id)).where(
-            QualityAudit.audit_number.like(f"AUD-{year}-%")
-        )
-        count = self.session.exec(count_stmt).one()
+        # Get last audit number for this month
+        query = select(QualityAudit).where(
+            QualityAudit.audit_number.like(f"{prefix}%")
+        ).order_by(QualityAudit.audit_number.desc())
         
-        return f"AUD-{year}-{count + 1:04d}"
+        last_audit = self.session.exec(query).first()
+        
+        if last_audit:
+            last_number = int(last_audit.audit_number.split('-')[-1])
+            new_number = last_number + 1
+        else:
+            new_number = 1
+        
+        return f"{prefix}-{new_number:04d}"
     
-    def _create_audit_response(self, audit: QualityAudit) -> QualityAuditResponse:
-        """Create audit response with calculated fields"""
+    async def _generate_nc_number(self) -> str:
+        """Generate unique non-conformity number"""
+        today = date.today()
+        prefix = f"NC-{today.strftime('%Y%m')}"
+        
+        # Get last NC number for this month
+        query = select(NonConformity).where(
+            NonConformity.nc_number.like(f"{prefix}%")
+        ).order_by(NonConformity.nc_number.desc())
+        
+        last_nc = self.session.exec(query).first()
+        
+        if last_nc:
+            last_number = int(last_nc.nc_number.split('-')[-1])
+            new_number = last_number + 1
+        else:
+            new_number = 1
+        
+        return f"{prefix}-{new_number:04d}"
+    
+    def _to_response(self, audit: QualityAudit) -> QualityAuditResponse:
+        """Convert audit model to response schema"""
         return QualityAuditResponse(
             id=audit.id,
             audit_number=audit.audit_number,
-            title=audit.title,
             entity_type=audit.entity_type,
             entity_id=audit.entity_id,
-            entity_name=audit.entity_name,
-            audit_type=audit.audit_type,
-            status=audit.status,
             auditor_id=audit.auditor_id,
-            auditor_name=audit.auditor_name,
-            external_auditor=audit.external_auditor,
             scheduled_date=audit.scheduled_date,
-            pass_score=audit.pass_score,
-            checklist=audit.get_checklist_dict(),
-            checklist_responses=audit.get_responses_dict(),
-            total_score=audit.total_score,
+            actual_date=audit.actual_date,
+            completed_date=audit.completed_date,
+            status=audit.status,
+            checklist=audit.checklist,
+            score=audit.score,
             outcome=audit.outcome,
-            summary=audit.summary,
-            recommendations=audit.recommendations,
-            start_date=audit.start_date,
-            completion_date=audit.completion_date,
-            requires_follow_up=audit.requires_follow_up,
-            follow_up_date=audit.follow_up_date,
-            follow_up_audit_id=audit.follow_up_audit_id,
+            remarks=audit.remarks,
             created_at=audit.created_at,
             updated_at=audit.updated_at,
-            is_passed=audit.is_passed(),
             is_overdue=audit.is_overdue(),
-            days_overdue=audit.get_days_overdue()
+            days_since_scheduled=audit.get_days_since_scheduled()
+        )
+    
+    def _nc_to_response(self, nc: NonConformity) -> NonConformityResponse:
+        """Convert non-conformity model to response schema"""
+        return NonConformityResponse(
+            id=nc.id,
+            audit_id=nc.audit_id,
+            nc_number=nc.nc_number,
+            description=nc.description,
+            severity=nc.severity,
+            root_cause=nc.root_cause,
+            corrective_action=nc.corrective_action,
+            due_date=nc.due_date,
+            status=nc.status,
+            created_by=nc.created_by,
+            resolved_by=nc.resolved_by,
+            resolved_date=nc.resolved_date,
+            resolution_notes=nc.resolution_notes,
+            created_at=nc.created_at,
+            updated_at=nc.updated_at,
+            is_overdue=nc.is_overdue(),
+            days_until_due=nc.days_until_due()
         )

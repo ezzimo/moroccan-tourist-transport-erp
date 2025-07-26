@@ -5,11 +5,11 @@ from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 from database import get_session
 from services.availability_service import AvailabilityService
-from schemas.availability import (
+from schemas.booking import (
     AvailabilityRequest, AvailabilityResponse, AvailabilitySlotCreate,
     AvailabilitySlotUpdate, AvailabilitySlotResponse
 )
-from models.availability import ResourceType
+from models.booking import ResourceType
 from utils.auth import require_permission, CurrentUser
 from typing import List, Optional, Dict, Any
 from datetime import date

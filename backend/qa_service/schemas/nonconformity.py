@@ -2,7 +2,7 @@
 Non-conformity-related Pydantic schemas
 """
 from pydantic import BaseModel, validator
-from typing import Optional
+from typing import Optional, Dict, Any
 from datetime import datetime, date
 from models.nonconformity import Severity, NCStatus
 import uuid

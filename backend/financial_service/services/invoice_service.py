@@ -3,62 +3,66 @@ Invoice service for invoice management operations
 """
 from sqlmodel import Session, select, and_, or_, func
 from fastapi import HTTPException, status
-from models.invoice import Invoice, InvoiceStatus, PaymentStatus
+from models.invoice import Invoice, InvoiceStatus
 from models.invoice_item import InvoiceItem
 from schemas.invoice import (
-    InvoiceCreate, InvoiceUpdate, InvoiceResponse, InvoiceSummary,
-    InvoiceSearch, InvoiceGeneration, InvoiceItemResponse
+    InvoiceCreate, InvoiceUpdate, InvoiceResponse
 )
-from utils.pagination import PaginationParams, paginate_query
-from utils.invoice_generator import InvoiceGenerator, InvoiceNumberGenerator
-from utils.currency import CurrencyConverter
-from typing import List, Optional, Tuple
+from utils.invoice_generator import InvoicePDFGenerator, generate_invoice_pdf
+# from utils.currency import convert_currency, get_exchange_rate
+from typing import List, Optional, Dict, Any
 from datetime import datetime, date, timedelta
 from decimal import Decimal
-import redis
 import uuid
-import httpx
-from io import BytesIO
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class InvoiceService:
     """Service for handling invoice operations"""
     
-    def __init__(self, session: Session, redis_client: redis.Redis):
+    def __init__(self, session: Session):
         self.session = session
-        self.redis = redis_client
-        self.currency_converter = CurrencyConverter(redis_client)
-        self.invoice_generator = InvoiceGenerator(session)
+        self.pdf_generator = InvoicePDFGenerator()
     
-    async def create_invoice(self, invoice_data: InvoiceCreate, created_by: uuid.UUID) -> InvoiceResponse:
-        """Create a new invoice"""
-        # Generate invoice number
-        invoice_number = InvoiceNumberGenerator.generate()
+    async def create_invoice(self, invoice_data: InvoiceCreate) -> InvoiceResponse:
+        """Create a new invoice
         
-        # Calculate due date if not provided
-        due_date = invoice_data.due_date
-        if not due_date:
-            from config import settings
-            due_date = date.today() + timedelta(days=settings.invoice_due_days)
+        Args:
+            invoice_data: Invoice creation data
+            
+        Returns:
+            Created invoice
+            
+        Raises:
+            HTTPException: If validation fails
+        """
+        # Generate invoice number
+        invoice_number = await self._generate_invoice_number()
+        
+        # Calculate totals
+        subtotal = sum(item.quantity * item.unit_price for item in invoice_data.items)
+        tax_amount = subtotal * (invoice_data.tax_rate / 100) if invoice_data.tax_rate else Decimal('0')
+        discount_amount = subtotal * (invoice_data.discount_rate / 100) if invoice_data.discount_rate else Decimal('0')
+        total_amount = subtotal + tax_amount - discount_amount
         
         # Create invoice
         invoice = Invoice(
             invoice_number=invoice_number,
-            booking_id=invoice_data.booking_id,
             customer_id=invoice_data.customer_id,
-            customer_name=invoice_data.customer_name,
-            customer_email=invoice_data.customer_email,
-            customer_address=invoice_data.customer_address,
-            customer_tax_id=invoice_data.customer_tax_id,
+            booking_id=invoice_data.booking_id,
+            issue_date=invoice_data.issue_date or date.today(),
+            due_date=invoice_data.due_date or (date.today() + timedelta(days=30)),
             currency=invoice_data.currency,
-            tax_rate=invoice_data.tax_rate,
-            tax_inclusive=invoice_data.tax_inclusive,
-            due_date=due_date,
-            payment_terms=invoice_data.payment_terms,
-            description=invoice_data.description,
-            notes=invoice_data.notes,
-            discount_amount=invoice_data.discount_amount,
-            created_by=created_by
+            subtotal=subtotal,
+            tax_rate=invoice_data.tax_rate or Decimal('0'),
+            tax_amount=tax_amount,
+            discount_rate=invoice_data.discount_rate or Decimal('0'),
+            discount_amount=discount_amount,
+            total_amount=total_amount,
+            status=InvoiceStatus.DRAFT,
+            notes=invoice_data.notes
         )
         
         self.session.add(invoice)
@@ -71,189 +75,156 @@ class InvoiceService:
                 description=item_data.description,
                 quantity=item_data.quantity,
                 unit_price=item_data.unit_price,
-                tax_rate=item_data.tax_rate,
-                item_code=item_data.item_code,
-                category=item_data.category
+                total_price=item_data.quantity * item_data.unit_price,
+                tax_rate=item_data.tax_rate or Decimal('0')
             )
-            item.calculate_total()
             self.session.add(item)
         
         self.session.commit()
         self.session.refresh(invoice)
         
-        # Calculate totals
-        invoice.calculate_totals()
-        self.session.add(invoice)
-        self.session.commit()
-        self.session.refresh(invoice)
-        
-        return self._create_invoice_response(invoice)
-    
-    async def generate_from_booking(
-        self, 
-        generation_data: InvoiceGeneration, 
-        created_by: uuid.UUID
-    ) -> InvoiceResponse:
-        """Generate invoice from booking"""
-        # Get booking information
-        booking_data = await self._get_booking_info(generation_data.booking_id)
-        
-        if not booking_data:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Booking not found"
-            )
-        
-        # Check if invoice already exists for this booking
-        existing_invoice = self.session.exec(
-            select(Invoice).where(Invoice.booking_id == generation_data.booking_id)
-        ).first()
-        
-        if existing_invoice:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invoice already exists for this booking"
-            )
-        
-        # Generate invoice
-        invoice = await self.invoice_generator.generate_from_booking(booking_data)
-        invoice.created_by = created_by
-        
-        if generation_data.due_date:
-            invoice.due_date = generation_data.due_date
-        if generation_data.payment_terms:
-            invoice.payment_terms = generation_data.payment_terms
-        if generation_data.notes:
-            invoice.notes = generation_data.notes
-        
-        self.session.add(invoice)
-        self.session.commit()
-        self.session.refresh(invoice)
-        
-        # Send immediately if requested
-        if generation_data.send_immediately:
-            await self.send_invoice(invoice.id)
-        
-        return self._create_invoice_response(invoice)
+        logger.info(f"Created invoice {invoice.invoice_number}")
+        return self._to_response(invoice)
     
     async def get_invoice(self, invoice_id: uuid.UUID) -> InvoiceResponse:
-        """Get invoice by ID"""
-        statement = select(Invoice).where(Invoice.id == invoice_id)
-        invoice = self.session.exec(statement).first()
+        """Get invoice by ID
         
+        Args:
+            invoice_id: Invoice UUID
+            
+        Returns:
+            Invoice details
+            
+        Raises:
+            HTTPException: If invoice not found
+        """
+        invoice = self.session.get(Invoice, invoice_id)
         if not invoice:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Invoice not found"
             )
         
-        return self._create_invoice_response(invoice)
+        return self._to_response(invoice)
     
     async def get_invoices(
-        self, 
-        pagination: PaginationParams,
-        search: Optional[InvoiceSearch] = None
-    ) -> Tuple[List[InvoiceResponse], int]:
-        """Get list of invoices with optional search"""
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        customer_id: Optional[uuid.UUID] = None,
+        status: Optional[InvoiceStatus] = None,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None,
+        overdue_only: bool = False
+    ) -> List[InvoiceResponse]:
+        """Get invoices with filtering
+        
+        Args:
+            skip: Number of records to skip
+            limit: Maximum number of records to return
+            customer_id: Filter by customer ID
+            status: Filter by invoice status
+            start_date: Filter invoices from this date
+            end_date: Filter invoices until this date
+            overdue_only: Show only overdue invoices
+            
+        Returns:
+            List of invoices
+        """
         query = select(Invoice)
         
-        # Apply search filters
-        if search:
-            conditions = []
-            
-            if search.query:
-                search_term = f"%{search.query}%"
-                conditions.append(
-                    or_(
-                        Invoice.invoice_number.ilike(search_term),
-                        Invoice.customer_name.ilike(search_term),
-                        Invoice.customer_email.ilike(search_term),
-                        Invoice.description.ilike(search_term)
-                    )
-                )
-            
-            if search.customer_id:
-                conditions.append(Invoice.customer_id == search.customer_id)
-            
-            if search.booking_id:
-                conditions.append(Invoice.booking_id == search.booking_id)
-            
-            if search.status:
-                conditions.append(Invoice.status == search.status)
-            
-            if search.payment_status:
-                conditions.append(Invoice.payment_status == search.payment_status)
-            
-            if search.currency:
-                conditions.append(Invoice.currency == search.currency)
-            
-            if search.issue_date_from:
-                conditions.append(Invoice.issue_date >= search.issue_date_from)
-            
-            if search.issue_date_to:
-                conditions.append(Invoice.issue_date <= search.issue_date_to)
-            
-            if search.due_date_from:
-                conditions.append(Invoice.due_date >= search.due_date_from)
-            
-            if search.due_date_to:
-                conditions.append(Invoice.due_date <= search.due_date_to)
-            
-            if search.amount_min:
-                conditions.append(Invoice.total_amount >= search.amount_min)
-            
-            if search.amount_max:
-                conditions.append(Invoice.total_amount <= search.amount_max)
-            
-            if search.is_overdue is not None:
-                if search.is_overdue:
-                    conditions.append(
-                        and_(
-                            Invoice.payment_status != PaymentStatus.PAID,
-                            Invoice.due_date < date.today()
-                        )
-                    )
-                else:
-                    conditions.append(
-                        or_(
-                            Invoice.payment_status == PaymentStatus.PAID,
-                            Invoice.due_date >= date.today()
-                        )
-                    )
-            
-            if conditions:
-                query = query.where(and_(*conditions))
+        # Apply filters
+        conditions = []
         
-        # Order by issue date (newest first)
-        query = query.order_by(Invoice.issue_date.desc())
+        if customer_id:
+            conditions.append(Invoice.customer_id == customer_id)
         
-        invoices, total = paginate_query(self.session, query, pagination)
+        if status:
+            conditions.append(Invoice.status == status)
         
-        return [self._create_invoice_response(invoice) for invoice in invoices], total
+        if start_date:
+            conditions.append(Invoice.issue_date >= start_date)
+        
+        if end_date:
+            conditions.append(Invoice.issue_date <= end_date)
+        
+        if overdue_only:
+            conditions.extend([
+                Invoice.due_date < date.today(),
+                Invoice.status.in_([InvoiceStatus.SENT, InvoiceStatus.OVERDUE])
+            ])
+        
+        if conditions:
+            query = query.where(and_(*conditions))
+        
+        query = query.order_by(Invoice.issue_date.desc()).offset(skip).limit(limit)
+        invoices = self.session.exec(query).all()
+        
+        return [self._to_response(invoice) for invoice in invoices]
     
-    async def update_invoice(self, invoice_id: uuid.UUID, invoice_data: InvoiceUpdate) -> InvoiceResponse:
-        """Update invoice information"""
-        statement = select(Invoice).where(Invoice.id == invoice_id)
-        invoice = self.session.exec(statement).first()
+    async def update_invoice(
+        self, 
+        invoice_id: uuid.UUID, 
+        invoice_data: InvoiceUpdate
+    ) -> InvoiceResponse:
+        """Update invoice information
         
+        Args:
+            invoice_id: Invoice UUID
+            invoice_data: Update data
+            
+        Returns:
+            Updated invoice
+            
+        Raises:
+            HTTPException: If invoice not found or cannot be updated
+        """
+        invoice = self.session.get(Invoice, invoice_id)
         if not invoice:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Invoice not found"
             )
         
-        # Check if invoice can be modified
+        # Check if invoice can be updated
         if invoice.status in [InvoiceStatus.PAID, InvoiceStatus.CANCELLED]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot modify paid or cancelled invoice"
+                detail=f"Cannot update invoice with status {invoice.status}"
             )
         
         # Update fields
         update_data = invoice_data.model_dump(exclude_unset=True)
-        
         for field, value in update_data.items():
-            setattr(invoice, field, value)
+            if field != "items":  # Handle items separately
+                setattr(invoice, field, value)
+        
+        # Recalculate totals if items updated
+        if "items" in update_data:
+            # Delete existing items
+            self.session.exec(
+                select(InvoiceItem).where(InvoiceItem.invoice_id == invoice_id)
+            ).delete()
+            
+            # Add new items
+            subtotal = Decimal('0')
+            for item_data in update_data["items"]:
+                item = InvoiceItem(
+                    invoice_id=invoice.id,
+                    description=item_data.description,
+                    quantity=item_data.quantity,
+                    unit_price=item_data.unit_price,
+                    total_price=item_data.quantity * item_data.unit_price,
+                    tax_rate=item_data.tax_rate or Decimal('0')
+                )
+                self.session.add(item)
+                subtotal += item.total_price
+            
+            # Recalculate totals
+            invoice.subtotal = subtotal
+            invoice.tax_amount = subtotal * (invoice.tax_rate / 100)
+            invoice.discount_amount = subtotal * (invoice.discount_rate / 100)
+            invoice.total_amount = subtotal + invoice.tax_amount - invoice.discount_amount
         
         invoice.updated_at = datetime.utcnow()
         
@@ -261,13 +232,22 @@ class InvoiceService:
         self.session.commit()
         self.session.refresh(invoice)
         
-        return self._create_invoice_response(invoice)
+        logger.info(f"Updated invoice {invoice.invoice_number}")
+        return self._to_response(invoice)
     
-    async def send_invoice(self, invoice_id: uuid.UUID) -> InvoiceResponse:
-        """Send invoice to customer"""
-        statement = select(Invoice).where(Invoice.id == invoice_id)
-        invoice = self.session.exec(statement).first()
+    async def send_invoice(self, invoice_id: uuid.UUID) -> dict:
+        """Send invoice to customer
         
+        Args:
+            invoice_id: Invoice UUID
+            
+        Returns:
+            Success message
+            
+        Raises:
+            HTTPException: If invoice not found or cannot be sent
+        """
+        invoice = self.session.get(Invoice, invoice_id)
         if not invoice:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -280,29 +260,80 @@ class InvoiceService:
                 detail="Only draft invoices can be sent"
             )
         
-        # Update invoice status
+        # Generate PDF
+        pdf_path = await generate_invoice_pdf(invoice)
+        
+        # Update status
         invoice.status = InvoiceStatus.SENT
-        invoice.sent_date = date.today()
+        invoice.sent_at = datetime.utcnow()
+        invoice.pdf_path = pdf_path
         invoice.updated_at = datetime.utcnow()
         
         self.session.add(invoice)
         self.session.commit()
-        self.session.refresh(invoice)
         
-        # TODO: Send email notification to customer
+        # TODO: Send email with PDF attachment
         
-        return self._create_invoice_response(invoice)
+        logger.info(f"Sent invoice {invoice.invoice_number}")
+        return {"message": "Invoice sent successfully"}
     
-    async def cancel_invoice(
+    async def mark_paid(
         self, 
         invoice_id: uuid.UUID, 
-        reason: str, 
-        cancelled_by: uuid.UUID
-    ) -> InvoiceResponse:
-        """Cancel an invoice"""
-        statement = select(Invoice).where(Invoice.id == invoice_id)
-        invoice = self.session.exec(statement).first()
+        payment_date: Optional[date] = None,
+        payment_method: Optional[str] = None
+    ) -> dict:
+        """Mark invoice as paid
         
+        Args:
+            invoice_id: Invoice UUID
+            payment_date: Date of payment
+            payment_method: Payment method used
+            
+        Returns:
+            Success message
+            
+        Raises:
+            HTTPException: If invoice not found or cannot be marked as paid
+        """
+        invoice = self.session.get(Invoice, invoice_id)
+        if not invoice:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Invoice not found"
+            )
+        
+        if invoice.status == InvoiceStatus.PAID:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invoice is already paid"
+            )
+        
+        invoice.status = InvoiceStatus.PAID
+        invoice.paid_at = payment_date or date.today()
+        invoice.payment_method = payment_method
+        invoice.updated_at = datetime.utcnow()
+        
+        self.session.add(invoice)
+        self.session.commit()
+        
+        logger.info(f"Marked invoice {invoice.invoice_number} as paid")
+        return {"message": "Invoice marked as paid"}
+    
+    async def cancel_invoice(self, invoice_id: uuid.UUID, reason: Optional[str] = None) -> dict:
+        """Cancel an invoice
+        
+        Args:
+            invoice_id: Invoice UUID
+            reason: Cancellation reason
+            
+        Returns:
+            Success message
+            
+        Raises:
+            HTTPException: If invoice not found or cannot be cancelled
+        """
+        invoice = self.session.get(Invoice, invoice_id)
         if not invoice:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -315,193 +346,131 @@ class InvoiceService:
                 detail="Cannot cancel paid invoice"
             )
         
-        # Update invoice status
         invoice.status = InvoiceStatus.CANCELLED
-        invoice.payment_status = PaymentStatus.FAILED
-        invoice.notes = f"{invoice.notes or ''}\n\nCancelled: {reason}".strip()
+        invoice.cancelled_at = datetime.utcnow()
+        if reason:
+            invoice.notes = f"{invoice.notes or ''}\nCancelled: {reason}"
         invoice.updated_at = datetime.utcnow()
         
         self.session.add(invoice)
         self.session.commit()
-        self.session.refresh(invoice)
         
-        return self._create_invoice_response(invoice)
-    
-    async def get_invoice_summary(self, days: int = 30) -> InvoiceSummary:
-        """Get invoice summary statistics"""
-        start_date = date.today() - timedelta(days=days)
-        
-        # Total invoices
-        total_stmt = select(func.count(Invoice.id)).where(
-            Invoice.issue_date >= start_date
-        )
-        total_invoices = self.session.exec(total_stmt).one()
-        
-        # Total amounts
-        amount_stmt = select(
-            func.sum(Invoice.total_amount),
-            func.sum(Invoice.total_amount).filter(Invoice.payment_status == PaymentStatus.PAID),
-            func.sum(Invoice.total_amount).filter(Invoice.payment_status != PaymentStatus.PAID)
-        ).where(Invoice.issue_date >= start_date)
-        
-        total_amount, paid_amount, outstanding_amount = self.session.exec(amount_stmt).one()
-        
-        # Overdue amount
-        overdue_stmt = select(func.sum(Invoice.total_amount)).where(
-            and_(
-                Invoice.payment_status != PaymentStatus.PAID,
-                Invoice.due_date < date.today()
-            )
-        )
-        overdue_amount = self.session.exec(overdue_stmt).one() or Decimal(0)
-        
-        # By status
-        status_stmt = select(
-            Invoice.status, func.count(Invoice.id)
-        ).where(
-            Invoice.issue_date >= start_date
-        ).group_by(Invoice.status)
-        
-        by_status = {}
-        for status_val, count in self.session.exec(status_stmt):
-            by_status[status_val.value] = count
-        
-        # By currency
-        currency_stmt = select(
-            Invoice.currency, func.sum(Invoice.total_amount)
-        ).where(
-            Invoice.issue_date >= start_date
-        ).group_by(Invoice.currency)
-        
-        by_currency = {}
-        for currency, amount in self.session.exec(currency_stmt):
-            by_currency[currency] = amount or Decimal(0)
-        
-        return InvoiceSummary(
-            total_invoices=total_invoices,
-            total_amount=total_amount or Decimal(0),
-            paid_amount=paid_amount or Decimal(0),
-            outstanding_amount=outstanding_amount or Decimal(0),
-            overdue_amount=overdue_amount,
-            by_status=by_status,
-            by_currency=by_currency,
-            average_payment_days=None  # TODO: Calculate from payment data
-        )
+        logger.info(f"Cancelled invoice {invoice.invoice_number}")
+        return {"message": "Invoice cancelled successfully"}
     
     async def get_overdue_invoices(self) -> List[InvoiceResponse]:
-        """Get all overdue invoices"""
-        statement = select(Invoice).where(
-            and_(
-                Invoice.payment_status != PaymentStatus.PAID,
-                Invoice.due_date < date.today()
-            )
-        ).order_by(Invoice.due_date)
+        """Get overdue invoices
         
-        invoices = self.session.exec(statement).all()
-        
-        return [self._create_invoice_response(invoice) for invoice in invoices]
+        Returns:
+            List of overdue invoices
+        """
+        return await self.get_invoices(overdue_only=True, limit=1000)
     
-    async def bulk_send_invoices(self, invoice_ids: List[uuid.UUID]) -> dict:
-        """Send multiple invoices at once"""
-        statement = select(Invoice).where(Invoice.id.in_(invoice_ids))
-        invoices = self.session.exec(statement).all()
+    async def get_invoice_analytics(
+        self,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None
+    ) -> Dict[str, Any]:
+        """Get invoice analytics
         
-        sent_count = 0
-        for invoice in invoices:
-            if invoice.status == InvoiceStatus.DRAFT:
-                invoice.status = InvoiceStatus.SENT
-                invoice.sent_date = date.today()
-                invoice.updated_at = datetime.utcnow()
-                self.session.add(invoice)
-                sent_count += 1
+        Args:
+            start_date: Analytics start date
+            end_date: Analytics end date
+            
+        Returns:
+            Analytics data
+        """
+        query = select(Invoice)
         
-        self.session.commit()
+        conditions = []
+        if start_date:
+            conditions.append(Invoice.issue_date >= start_date)
+        if end_date:
+            conditions.append(Invoice.issue_date <= end_date)
+        
+        if conditions:
+            query = query.where(and_(*conditions))
+        
+        invoices = self.session.exec(query).all()
+        
+        # Calculate metrics
+        total_invoices = len(invoices)
+        total_amount = sum(inv.total_amount for inv in invoices)
+        paid_invoices = len([inv for inv in invoices if inv.status == InvoiceStatus.PAID])
+        paid_amount = sum(inv.total_amount for inv in invoices if inv.status == InvoiceStatus.PAID)
+        overdue_invoices = len([inv for inv in invoices if inv.is_overdue()])
+        overdue_amount = sum(inv.total_amount for inv in invoices if inv.is_overdue())
+        
+        # Average payment time
+        paid_with_dates = [inv for inv in invoices if inv.status == InvoiceStatus.PAID and inv.paid_at]
+        avg_payment_days = None
+        if paid_with_dates:
+            payment_days = [(inv.paid_at - inv.issue_date).days for inv in paid_with_dates]
+            avg_payment_days = sum(payment_days) / len(payment_days)
         
         return {
-            "message": f"Successfully sent {sent_count} invoices",
-            "sent_count": sent_count,
-            "total_requested": len(invoice_ids)
+            "total_invoices": total_invoices,
+            "total_amount": float(total_amount),
+            "paid_invoices": paid_invoices,
+            "paid_amount": float(paid_amount),
+            "overdue_invoices": overdue_invoices,
+            "overdue_amount": float(overdue_amount),
+            "collection_rate": (paid_amount / total_amount * 100) if total_amount > 0 else 0,
+            "average_payment_days": avg_payment_days,
+            "period": {
+                "start_date": start_date.isoformat() if start_date else None,
+                "end_date": end_date.isoformat() if end_date else None
+            }
         }
     
-    async def generate_invoice_pdf(self, invoice: InvoiceResponse) -> BytesIO:
-        """Generate PDF for invoice"""
-        # TODO: Implement PDF generation using reportlab
-        # This is a placeholder implementation
-        pdf_content = f"Invoice {invoice.invoice_number}\nAmount: {invoice.total_amount} {invoice.currency}"
+    async def _generate_invoice_number(self) -> str:
+        """Generate unique invoice number"""
+        # Get current year and month
+        now = datetime.now()
+        prefix = f"INV-{now.year}{now.month:02d}"
         
-        buffer = BytesIO()
-        buffer.write(pdf_content.encode())
-        buffer.seek(0)
+        # Get last invoice number for this month
+        last_invoice = self.session.exec(
+            select(Invoice)
+            .where(Invoice.invoice_number.like(f"{prefix}%"))
+            .order_by(Invoice.invoice_number.desc())
+        ).first()
         
-        return buffer
+        if last_invoice:
+            # Extract sequence number and increment
+            last_seq = int(last_invoice.invoice_number.split('-')[-1])
+            seq = last_seq + 1
+        else:
+            seq = 1
+        
+        return f"{prefix}-{seq:04d}"
     
-    async def _get_booking_info(self, booking_id: uuid.UUID) -> Optional[dict]:
-        """Get booking information from booking service"""
-        try:
-            from config import settings
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{settings.booking_service_url}/api/v1/bookings/{booking_id}"
-                )
-                if response.status_code == 200:
-                    return response.json()
-        except:
-            pass
-        return None
-    
-    def _create_invoice_response(self, invoice: Invoice) -> InvoiceResponse:
-        """Create invoice response with calculated fields"""
-        # Get invoice items
-        items_stmt = select(InvoiceItem).where(InvoiceItem.invoice_id == invoice.id)
-        items = self.session.exec(items_stmt).all()
-        
-        item_responses = []
-        for item in items:
-            item_responses.append(InvoiceItemResponse(
-                id=item.id,
-                description=item.description,
-                quantity=item.quantity,
-                unit_price=item.unit_price,
-                total_amount=item.total_amount,
-                tax_rate=item.tax_rate,
-                tax_amount=item.tax_amount,
-                item_code=item.item_code,
-                category=item.category
-            ))
-        
+    def _to_response(self, invoice: Invoice) -> InvoiceResponse:
+        """Convert invoice model to response schema"""
         return InvoiceResponse(
             id=invoice.id,
             invoice_number=invoice.invoice_number,
-            booking_id=invoice.booking_id,
             customer_id=invoice.customer_id,
-            customer_name=invoice.customer_name,
-            customer_email=invoice.customer_email,
-            customer_address=invoice.customer_address,
-            customer_tax_id=invoice.customer_tax_id,
-            subtotal=invoice.subtotal,
-            tax_amount=invoice.tax_amount,
-            discount_amount=invoice.discount_amount,
-            total_amount=invoice.total_amount,
-            currency=invoice.currency,
-            tax_rate=invoice.tax_rate,
-            tax_inclusive=invoice.tax_inclusive,
-            status=invoice.status,
-            payment_status=invoice.payment_status,
+            booking_id=invoice.booking_id,
             issue_date=invoice.issue_date,
             due_date=invoice.due_date,
-            sent_date=invoice.sent_date,
-            paid_date=invoice.paid_date,
-            payment_terms=invoice.payment_terms,
-            payment_method=invoice.payment_method,
-            description=invoice.description,
+            currency=invoice.currency,
+            subtotal=invoice.subtotal,
+            tax_rate=invoice.tax_rate,
+            tax_amount=invoice.tax_amount,
+            discount_rate=invoice.discount_rate,
+            discount_amount=invoice.discount_amount,
+            total_amount=invoice.total_amount,
+            status=invoice.status,
             notes=invoice.notes,
-            created_by=invoice.created_by,
-            approved_by=invoice.approved_by,
+            pdf_path=invoice.pdf_path,
+            sent_at=invoice.sent_at,
+            paid_at=invoice.paid_at,
+            cancelled_at=invoice.cancelled_at,
+            payment_method=invoice.payment_method,
             created_at=invoice.created_at,
             updated_at=invoice.updated_at,
-            items=item_responses,
-            paid_amount=invoice.get_paid_amount(),
-            outstanding_amount=invoice.get_outstanding_amount(),
             is_overdue=invoice.is_overdue(),
-            days_overdue=invoice.get_days_overdue()
+            days_overdue=invoice.days_overdue(),
+            items=invoice.items or []
         )

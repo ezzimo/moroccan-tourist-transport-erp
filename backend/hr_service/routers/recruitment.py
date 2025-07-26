@@ -12,7 +12,7 @@ from schemas.job_application import (
 from models.job_application import ApplicationSource, ApplicationStage, Priority
 from utils.auth import require_permission, CurrentUser
 from utils.pagination import PaginationParams, PaginatedResponse
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import redis
 import uuid
 

@@ -95,18 +95,39 @@ class SupplierResponse(SupplierBase):
     average_order_value: Decimal
 
 
+class SupplierWithStats(SupplierResponse):
+    """Supplier response with performance statistics"""
+    total_orders: int = 0
+    delivered_orders: int = 0
+    on_time_deliveries: int = 0
+    average_delivery_days: Optional[float] = None
+    on_time_rate: float = 0.0
+    total_order_value: float = 0.0
+    last_order_date: Optional[datetime] = None
+    
+    class Config:
+        from_attributes = True
+
+
 class SupplierPerformance(BaseModel):
     """Supplier performance metrics"""
     supplier_id: uuid.UUID
     supplier_name: str
     total_orders: int
-    total_value: Decimal
-    on_time_delivery_rate: float
-    quality_rating: float
-    performance_rating: float
-    last_order_date: Optional[date]
-    average_order_value: Decimal
-    delivery_time_days: Optional[int]
+    delivered_orders: int
+    pending_orders: int
+    on_time_deliveries: int
+    late_deliveries: int
+    average_delivery_days: float
+    on_time_rate: float
+    performance_score: float
+    total_order_value: float
+    average_order_value: float
+    last_order_date: Optional[datetime]
+    performance_trend: str  # "improving", "stable", "declining"
+    
+    class Config:
+        from_attributes = True
 
 
 class SupplierSummary(BaseModel):

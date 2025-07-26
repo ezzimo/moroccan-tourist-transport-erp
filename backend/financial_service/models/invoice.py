@@ -1,6 +1,7 @@
 """
 Invoice model for billing management
 """
+from typing import List, Optional
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column, Numeric
 from datetime import datetime, date

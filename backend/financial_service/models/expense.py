@@ -3,7 +3,7 @@ Expense model for cost tracking
 """
 from sqlmodel import SQLModel, Field
 from sqlalchemy import Column, Numeric
-from typing import Optional
+from typing import List, Optional
 from datetime import datetime, date
 from enum import Enum
 from decimal import Decimal
