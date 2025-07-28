@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, Users, DollarSign, MapPin, CheckCircle, UserCog, Package } from 'lucide-react';
-import { Users, MessageSquare, Star, TrendingUp, ArrowRight, Truck, UserCheck, DollarSign, Calendar, Bell } from 'lucide-react';
+import { Users, MessageSquare, Star, TrendingUp, ArrowRight, Truck, UserCheck, DollarSign, Calendar, Bell, Shield } from 'lucide-react';
 import { useCustomers } from '../crm/hooks/useCustomers';
 import { useFeedbackStats } from '../crm/hooks/useFeedback';
 import { useVehicles } from '../fleet/hooks/useVehicles';
@@ -14,9 +14,14 @@ import { useQADashboard } from '../qa/hooks/useCertifications';
 import { useHRDashboard } from '../hr/hooks/useAnalytics';
 import { useInventoryDashboard } from '../inventory/hooks/useAnalytics';
 import { useNotificationStats } from '../notification/hooks/useNotifications';
+import { useAuth } from '../auth/context/AuthContext';
+import AdminUserManagement from '../auth/components/AdminUserManagement';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 export default function DashboardPage() {
+  console.log('🔧 DashboardPage: Component initializing');
+  
+  const { isAdmin, hasPermission, state: authState } = useAuth();
   const { data: customersData, isLoading: customersLoading } = useCustomers({ size: 5 });
   const { data: feedbackStats, isLoading: statsLoading } = useFeedbackStats(30);
   const { data: vehiclesData, isLoading: vehiclesLoading } = useVehicles({ size: 5 });
@@ -29,6 +34,17 @@ export default function DashboardPage() {
   const { data: hrDashboard, isLoading: hrLoading } = useHRDashboard();
   const { data: inventoryDashboard, isLoading: inventoryLoading } = useInventoryDashboard();
   const { data: notificationStats, isLoading: notificationLoading } = useNotificationStats(30);
+
+  // Check if user can access user management
+  const canManageUsers = isAdmin || hasPermission('auth', 'read', 'users');
+
+  console.log('🔧 DashboardPage: Auth state', {
+    isAdmin,
+    canManageUsers,
+    userEmail: authState.user?.email,
+    userRoles: authState.user?.roles?.map(r => r.name),
+    permissions: authState.user?.permissions?.slice(0, 5) // Log first 5 permissions
+  });
 
   const stats = [
     {
@@ -111,12 +127,18 @@ export default function DashboardPage() {
   ];
 
   if (customersLoading || statsLoading || vehiclesLoading || driversLoading || financialLoading || bookingsLoading || templatesLoading || toursLoading || qaLoading || hrLoading || inventoryLoading || notificationLoading) {
+    console.log('🔧 DashboardPage: Still loading data');
     return (
       <div className="flex items-center justify-center min-h-96">
         <LoadingSpinner size="lg" />
       </div>
     );
   }
+
+  console.log('🔧 DashboardPage: Rendering dashboard', {
+    statsCount: stats.length,
+    showAdminSection: canManageUsers
+  });
 
   return (
     <div className="space-y-6">
@@ -126,7 +148,38 @@ export default function DashboardPage() {
         <p className="text-orange-100">
           Manage your Moroccan tourist transport operations with ease
         </p>
+        {isAdmin && (
+          <div className="mt-3 flex items-center text-orange-100">
+            <Shield className="h-4 w-4 mr-2" />
+            <span className="text-sm">Administrator Access</span>
+          </div>
+        )}
       </div>
+
+      {/* Admin User Management Section */}
+      {canManageUsers && (
+        <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold mb-2 flex items-center">
+                <Shield className="h-6 w-6 mr-2" />
+                Admin Panel
+              </h2>
+              <p className="text-blue-100">
+                Manage users, roles, and system permissions
+              </p>
+            </div>
+            <Link
+              to="/admin/users"
+              className="inline-flex items-center px-4 py-2 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-medium"
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Manage Users
+              <ArrowRight className="h-4 w-4 ml-2" />
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -355,6 +408,21 @@ export default function DashboardPage() {
             </div>
             <ArrowRight className="h-5 w-5 text-gray-400 group-hover:text-gray-600 transition-colors ml-auto" />
           </Link>
+
+          {/* Admin User Management Quick Action */}
+          {canManageUsers && (
+            <Link
+              to="/admin/users"
+              className="flex items-center p-4 border border-blue-200 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors group"
+            >
+              <Shield className="h-8 w-8 text-blue-600" />
+              <div className="ml-3">
+                <p className="font-medium text-blue-900">User Management</p>
+                <p className="text-sm text-blue-700">Manage users and permissions</p>
+              </div>
+              <ArrowRight className="h-5 w-5 text-blue-400 group-hover:text-blue-600 transition-colors ml-auto" />
+            </Link>
+          )}
         </div>
       </div>
     </div>
