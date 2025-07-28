@@ -7,6 +7,10 @@ interface AuthContextType {
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  refreshUserData: () => Promise<void>;
+  hasPermission: (resource: string, action: string, scope?: string) => boolean;
+  isAdmin: boolean;
+  permissions: string[];
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -16,7 +20,10 @@ type AuthAction =
   | { type: 'LOGIN_SUCCESS'; payload: { user: User; token: string; expiresIn: number } }
   | { type: 'LOGIN_ERROR'; payload: string }
   | { type: 'LOGOUT' }
-  | { type: 'SET_USER'; payload: User };
+  | { type: 'SET_USER'; payload: User }
+  | { type: 'REFRESH_USER_START' }
+  | { type: 'REFRESH_USER_SUCCESS'; payload: User }
+  | { type: 'REFRESH_USER_ERROR'; payload: string };
 
 const initialState: AuthState = {
   user: null,
@@ -63,6 +70,22 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
         user: action.payload,
         isAuthenticated: true,
         isLoading: false,
+      };
+    case 'REFRESH_USER_START':
+      return { ...state, isLoading: true };
+    case 'REFRESH_USER_SUCCESS':
+      return {
+        ...state,
+        user: action.payload,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+      };
+    case 'REFRESH_USER_ERROR':
+      return {
+        ...state,
+        isLoading: false,
+        error: action.payload,
       };
     default:
       return state;
@@ -135,8 +158,76 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const refreshUserData = async () => {
+    dispatch({ type: 'REFRESH_USER_START' });
+    try {
+      const userData = await authApi.me();
+      dispatch({ type: 'REFRESH_USER_SUCCESS', payload: userData });
+    } catch (error: any) {
+      const message = error.response?.data?.detail || 'Failed to refresh user data';
+      dispatch({ type: 'REFRESH_USER_ERROR', payload: message });
+      console.error('Failed to refresh user data:', error);
+    }
+  };
+
+  // Check if user has specific permission
+  const hasPermission = (resource: string, action: string, scope: string = "*"): boolean => {
+    if (!state.user || !state.user.permissions) {
+      return false;
+    }
+
+    // Check for exact permission match
+    const exactPermission = `${resource}:${action}:${scope}`;
+    if (state.user.permissions.includes(exactPermission)) {
+      return true;
+    }
+
+    // Check for wildcard scope permission
+    const wildcardPermission = `${resource}:${action}:*`;
+    if (state.user.permissions.includes(wildcardPermission)) {
+      return true;
+    }
+
+    // Check for admin permissions (full access)
+    const adminPermission = `${resource}:*:*`;
+    if (state.user.permissions.includes(adminPermission)) {
+      return true;
+    }
+
+    // Check for super admin (all permissions)
+    if (state.user.permissions.includes("*:*:*")) {
+      return true;
+    }
+
+    return false;
+  };
+
+  // Check if user is admin
+  const isAdmin = (): boolean => {
+    if (!state.user || !state.user.roles) {
+      return false;
+    }
+
+    const adminRoles = ['super_admin', 'tenant_admin', 'role_manager', 'user_manager'];
+    return state.user.roles.some(role => adminRoles.includes(role.name));
+  };
+
+  // Get all user permissions
+  const permissions = state.user?.permissions || [];
+
   return (
-    <AuthContext.Provider value={{ state, login, logout, refreshUser }}>
+    <AuthContext.Provider 
+      value={{ 
+        state, 
+        login, 
+        logout, 
+        refreshUser, 
+        refreshUserData,
+        hasPermission, 
+        isAdmin: isAdmin(), 
+        permissions 
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
