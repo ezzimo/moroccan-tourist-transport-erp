@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { Calendar, Users, DollarSign, MapPin, CheckCircle, UserCog, Package } from 'lucide-react';
 import { Users, MessageSquare, Star, TrendingUp, ArrowRight, Truck, UserCheck, DollarSign, Calendar, Bell } from 'lucide-react';
 import { useCustomers } from '../crm/hooks/useCustomers';
 import { useFeedbackStats } from '../crm/hooks/useFeedback';
@@ -32,21 +33,21 @@ export default function DashboardPage() {
   const stats = [
     {
       name: 'Total Customers',
-      value: customersData?.total || 0,
+      value: customersData?.total ?? 0,
       icon: Users,
       color: 'text-blue-600 bg-blue-100',
       href: '/customers',
     },
     {
       name: 'Fleet Vehicles',
-      value: vehiclesData?.total || 0,
+      value: vehiclesData?.total ?? 0,
       icon: Truck,
       color: 'text-orange-600 bg-orange-100',
       href: '/fleet',
     },
     {
       name: 'Active Drivers',
-      value: driversData?.items?.filter(d => d.status === 'Active').length || 0,
+      value: driversData?.items?.filter(d => d.status === 'Active').length ?? 0,
       icon: UserCheck,
       color: 'text-green-600 bg-green-100',
       href: '/drivers',
@@ -60,49 +61,49 @@ export default function DashboardPage() {
     },
     {
       name: 'Active Bookings',
-      value: bookingsData?.items?.filter(b => b.status === 'Confirmed').length || 0,
+      value: bookingsData?.items?.filter(b => b.status === 'Confirmed').length ?? 0,
       icon: Calendar,
       color: 'text-purple-600 bg-purple-100',
       href: '/bookings',
     },
     {
       name: 'Tour Templates',
-      value: featuredTemplates?.length || 0,
+      value: featuredTemplates?.length ?? 0,
       icon: MapPin,
       color: 'text-purple-600 bg-purple-100',
       href: '/tours',
     },
     {
       name: 'Active Tours',
-      value: activeTours?.length || 0,
+      value: activeTours?.length ?? 0,
       icon: MapPin,
       color: 'text-indigo-600 bg-indigo-100',
       href: '/tours/instances',
     },
     {
       name: 'QA Audits',
-      value: qaDashboard?.audit_summary.total_audits || 0,
+      value: qaDashboard?.audit_summary?.total_audits ?? 0,
       icon: CheckCircle,
       color: 'text-teal-600 bg-teal-100',
       href: '/qa',
     },
     {
       name: 'Total Employees',
-      value: hrDashboard?.total_employees || 0,
+      value: hrDashboard?.total_employees ?? 0,
       icon: UserCog,
       color: 'text-purple-600 bg-purple-100',
       href: '/hr/employees',
     },
     {
       name: 'Inventory Items',
-      value: inventoryDashboard?.total_items || 0,
+      value: inventoryDashboard?.total_items ?? 0,
       icon: Package,
       color: 'text-indigo-600 bg-indigo-100',
       href: '/inventory/items',
     },
     {
       name: 'Notifications Sent',
-      value: notificationStats?.total_notifications || 0,
+      value: notificationStats?.total_notifications ?? 0,
       icon: Bell,
       color: 'text-purple-600 bg-purple-100',
       href: '/notifications',

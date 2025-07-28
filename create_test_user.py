@@ -3,6 +3,7 @@
 Script to create a test user directly in the database
 """
 import hashlib
+import os
 import uuid
 from datetime import datetime
 import psycopg2
@@ -26,7 +27,7 @@ def create_test_user():
     
     # Database connection
     conn = psycopg2.connect(
-        host="localhost",
+        host=os.getenv("DB_HOST", "db_auth"),
         port="5432",
         database="auth_db",
         user="postgres",

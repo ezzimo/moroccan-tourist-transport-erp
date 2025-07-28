@@ -1,5 +1,5 @@
 import React from 'react';
-import { X } from 'lucide-react';
+import { X, Package } from 'lucide-react';
 import { BookingFilters } from '../types/booking';
 
 interface BookingFiltersPanelProps {

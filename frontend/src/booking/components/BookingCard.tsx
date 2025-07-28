@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, Users, DollarSign, MapPin, Clock } from 'lucide-react';
+import { Calendar, Users, DollarSign, Package, Clock } from 'lucide-react';
 import { Booking } from '../types/booking';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 

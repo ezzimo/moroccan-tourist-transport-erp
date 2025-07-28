@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X } from 'lucide-react';
+import { X, Package } from 'lucide-react';
 import { useCreateBooking } from '../hooks/useBookings';
 import { useCustomers } from '../../crm/hooks/useCustomers';
 import { usePricingCalculation } from '../hooks/usePricing';
