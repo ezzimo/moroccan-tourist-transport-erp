@@ -34,6 +34,9 @@ class UserResponse(UserBase):
     created_at: datetime
     updated_at: Optional[datetime]
     last_login: Optional[datetime]
+    
+    class Config:
+        from_attributes = True
 
 
 class UserWithRoles(UserResponse):

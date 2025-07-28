@@ -284,6 +284,9 @@ cd moroccan-tourist-transport-erp
 # Start all services (this will take 3-5 minutes on first run)
 docker compose up -d --build
 
+# Bootstrap roles and demo users
+make bootstrap-users
+
 # Verify all services are healthy
 docker compose ps
 ```
@@ -292,7 +295,21 @@ docker compose ps
 
 - **Frontend Application**: http://localhost:3000
 - **API Documentation**: http://localhost:8000/docs
-- **Default Login**: `ahmed@example.com` / `SecurePassword123!`
+
+### 👥 Demo User Accounts
+
+After running the bootstrap script, you can log in with these demo accounts:
+
+| Role | Email | Password | Description |
+|------|-------|----------|-------------|
+| **Super Admin** | `superadmin@demo.local` | `SuperAdmin123!` | Full system access |
+| **Company Admin** | `admin@demo.local` | `Admin123!` | Company management |
+| **Dispatcher** | `dispatcher@demo.local` | `Dispatcher123!` | Operations management |
+| **Fleet Manager** | `fleetmanager@demo.local` | `Fleet123!` | Vehicle management |
+| **Driver** | `driver@demo.local` | `Driver123!` | Driver mobile app |
+| **HR Manager** | `hrmanager@demo.local` | `HR123!` | Human resources |
+| **Finance Manager** | `financemanager@demo.local` | `Finance123!` | Financial operations |
+| **Client** | `client@demo.local` | `Client123!` | Customer portal |
 
 ### ✅ Health Check
 
@@ -305,6 +322,116 @@ curl http://localhost:8000/health
 ```
 
 **Supported Platforms**: Linux, macOS, Windows (WSL2 recommended)
+
+## 🔧 Bootstrap & Automation
+
+The system includes comprehensive automation for setting up roles, users, and permissions.
+
+### 🚀 Bootstrap Script Features
+
+- **🔐 26 Predefined Roles**: Complete RBAC system with granular permissions
+- **👥 10 Demo Users**: Ready-to-use accounts for testing and development
+- **🌍 Multi-language Support**: English, French, and Arabic role labels
+- **🔄 Idempotent Operations**: Safe to run multiple times
+- **📊 Comprehensive Logging**: Detailed execution logs for debugging
+- **🧪 Dry-run Mode**: Preview changes before execution
+
+### 📋 Available Commands
+
+```bash
+# Quick setup commands
+make bootstrap-users          # Create demo roles and users
+make bootstrap-users-prod     # Production environment setup
+make bootstrap-users-dry      # Preview what would be created
+make dev-setup               # Complete development environment
+
+# Manual script execution
+python3 scripts/bootstrap_roles_users.py --dry-run --verbose
+python3 scripts/bootstrap_roles_users.py --environment production
+python3 scripts/bootstrap_roles_users.py --log-file custom.log
+```
+
+### 🔐 Role Hierarchy
+
+The system implements a comprehensive role-based access control (RBAC) system:
+
+#### 🛠️ Administration Roles
+- `super_admin` - System-wide administration
+- `tenant_admin` - Company-level administration  
+- `role_manager` - Role and permission management
+
+#### 🚍 Operational Roles
+- `dispatcher` - Booking and route management
+- `route_planner` - Route optimization and scheduling
+- `booking_manager` - Reservation management
+- `client_account_manager` - Customer relationship management
+
+#### 🚐 Fleet Roles
+- `fleet_manager` - Vehicle and maintenance oversight
+- `maintenance_tech` - Maintenance operations
+- `fuel_log_manager` - Fuel tracking and optimization
+
+#### 👨‍✈️ Driver Roles
+- `driver` - Mobile app access and trip management
+- `lead_driver` - Driver supervision and incident management
+
+#### 💰 Finance Roles
+- `finance_manager` - Financial oversight and reporting
+- `billing_agent` - Invoice and payment processing
+- `accountant` - Financial reporting and analysis
+
+#### 📦 Inventory & QA Roles
+- `inventory_manager` - Stock and supplier management
+- `warehouse_staff` - Inventory operations
+- `qa_officer` - Quality assurance and auditing
+- `compliance_officer` - Regulatory compliance
+
+#### 👥 HR & Communication Roles
+- `hr_manager` - Employee management
+- `recruiter` - Hiring and recruitment
+- `trainer` - Training and certification
+- `communication_manager` - Notification management
+
+### 🔍 Debugging & Logging
+
+The bootstrap script includes maximum logging for debugging:
+
+```bash
+# Enable verbose logging
+python3 scripts/bootstrap_roles_users.py --verbose --log-file debug.log
+
+# Test script execution
+python3 scripts/test_bootstrap_execution.py
+```
+
+**Log Features:**
+- SQL query logging with parameters and timing
+- Database connection details and version info
+- Password hashing timing and security details
+- Comprehensive execution statistics
+- Detailed error messages with troubleshooting tips
+
+### 🏗️ CI/CD Integration
+
+The bootstrap automation integrates with CI/CD pipelines:
+
+```yaml
+# GitHub Actions example
+- name: Bootstrap Roles and Users
+  run: make bootstrap-users-prod
+  env:
+    DB_HOST: ${{ secrets.DB_HOST }}
+    DB_USER: ${{ secrets.DB_USER }}
+    DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+```
+
+### 🐳 Docker Integration
+
+```dockerfile
+# Add to your Dockerfile
+COPY scripts/bootstrap_roles_users.py /app/scripts/
+RUN python3 scripts/bootstrap_roles_users.py --environment production
+```
 
 ## Full Setup & Development Guide
 

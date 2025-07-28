@@ -6,7 +6,8 @@ from fastapi.testclient import TestClient
 from sqlmodel import SQLModel, create_engine, Session
 from main import app
 from database import get_session, get_redis
-from config import settings
+from test_database import get_test_session, get_test_redis, create_test_db_and_tables, test_engine
+from test_config import test_settings
 import fakeredis
 import tempfile
 import os
@@ -16,18 +17,15 @@ import os
 @pytest.fixture(name="session")
 def session_fixture():
     """Create test database session"""
-    # Use in-memory SQLite for testing
-    engine = create_engine(
-        "sqlite:///test.db",
-        connect_args={"check_same_thread": False}
-    )
-    SQLModel.metadata.create_all(engine)
+    # Create tables
+    create_test_db_and_tables()
     
-    with Session(engine) as session:
+    with Session(test_engine) as session:
         yield session
     
     # Clean up
-    os.unlink("test.db")
+    if os.path.exists("test_auth.db"):
+        os.unlink("test_auth.db")
 
 
 @pytest.fixture(name="redis_client")
