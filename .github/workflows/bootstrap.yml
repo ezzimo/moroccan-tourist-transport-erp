@@ -1,0 +1,153 @@
+name: Bootstrap Roles and Users
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'development'
+        type: choice
+        options:
+          - development
+          - staging
+          - production
+      dry_run:
+        description: 'Run in dry-run mode (preview only)'
+        required: false
+        default: false
+        type: boolean
+
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/bootstrap_roles_users.py'
+      - '.github/workflows/bootstrap.yml'
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: auth_db
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-bootstrap.txt
+
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for PostgreSQL..."
+            sleep 2
+          done
+
+      - name: Create database tables
+        run: |
+          # This would typically run your database migrations
+          # For demo purposes, we'll create basic tables
+          PGPASSWORD=password psql -h localhost -U postgres -d auth_db -c "
+            CREATE TABLE IF NOT EXISTS role (
+              id VARCHAR(32) PRIMARY KEY,
+              name VARCHAR(100) UNIQUE NOT NULL,
+              description TEXT,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE TABLE IF NOT EXISTS permissions (
+              id VARCHAR(32) PRIMARY KEY,
+              service_name VARCHAR(100) NOT NULL,
+              action VARCHAR(100) NOT NULL,
+              resource VARCHAR(100) DEFAULT 'all',
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE TABLE IF NOT EXISTS rolepermission (
+              role_id VARCHAR(32) REFERENCES role(id),
+              permission_id VARCHAR(32) REFERENCES permissions(id),
+              PRIMARY KEY (role_id, permission_id)
+            );
+            
+            CREATE TABLE IF NOT EXISTS users (
+              id VARCHAR(32) PRIMARY KEY,
+              full_name VARCHAR(255) NOT NULL,
+              email VARCHAR(255) UNIQUE NOT NULL,
+              phone VARCHAR(20),
+              password_hash VARCHAR(255) NOT NULL,
+              is_active BOOLEAN DEFAULT TRUE,
+              is_verified BOOLEAN DEFAULT FALSE,
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            
+            CREATE TABLE IF NOT EXISTS user_roles (
+              user_id VARCHAR(32) REFERENCES users(id),
+              role_id VARCHAR(32) REFERENCES role(id),
+              PRIMARY KEY (user_id, role_id)
+            );
+          "
+
+      - name: Run bootstrap script (dry-run)
+        if: ${{ github.event.inputs.dry_run == 'true' || github.event_name == 'push' }}
+        run: |
+          python3 scripts/bootstrap_roles_users.py --dry-run --verbose
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: auth_db
+          DB_USER: postgres
+          DB_PASSWORD: password
+
+      - name: Run bootstrap script (actual)
+        if: ${{ github.event.inputs.dry_run != 'true' && github.event_name == 'workflow_dispatch' }}
+        run: |
+          python3 scripts/bootstrap_roles_users.py --environment ${{ github.event.inputs.environment }} --verbose
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: auth_db
+          DB_USER: postgres
+          DB_PASSWORD: password
+
+      - name: Verify bootstrap results
+        if: ${{ github.event.inputs.dry_run != 'true' && github.event_name == 'workflow_dispatch' }}
+        run: |
+          echo "Verifying created roles and users..."
+          PGPASSWORD=password psql -h localhost -U postgres -d auth_db -c "
+            SELECT 'Roles created:' as info, COUNT(*) as count FROM role;
+            SELECT 'Users created:' as info, COUNT(*) as count FROM users;
+            SELECT 'Role assignments:' as info, COUNT(*) as count FROM user_roles;
+          "
+
+      - name: Generate bootstrap report
+        if: always()
+        run: |
+          echo "## Bootstrap Report" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: ${{ github.event.inputs.environment || 'development' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dry Run**: ${{ github.event.inputs.dry_run || 'false' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp**: $(date)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+

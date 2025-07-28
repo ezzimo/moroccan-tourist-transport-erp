@@ -1,0 +1,13 @@
+# Bootstrap Script Dependencies
+# Required packages for role and user creation automation
+
+# Database connectivity
+psycopg2-binary==2.9.7
+sqlmodel==0.0.14
+
+# Password hashing
+passlib[bcrypt]==1.7.4
+
+# Utilities
+python-dotenv==1.0.0
+
