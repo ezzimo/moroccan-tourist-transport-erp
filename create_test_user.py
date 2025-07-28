@@ -25,6 +25,13 @@ def create_test_user():
     password_hash = hash_password(password)
     created_at = datetime.utcnow()
     
+    # Default values for not-null columns
+    is_active = True
+    is_verified = True
+    is_locked = False  # ✅ PATCH
+    must_change_password = False  # ✅ PATCH
+    failed_login_attempts = 0  # ✅ PATCH
+
     # Database connection
     conn = psycopg2.connect(
         host=os.getenv("DB_HOST", "db_auth"),
@@ -39,22 +46,28 @@ def create_test_user():
         
         # Insert user
         insert_query = """
-        INSERT INTO users (id, full_name, email, phone, password_hash, is_active, is_verified, created_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        INSERT INTO users (
+            id, full_name, email, phone, password_hash,
+            is_active, is_verified, is_locked,
+            must_change_password, failed_login_attempts, created_at
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """
         
         cursor.execute(insert_query, (
-            user_id, full_name, email, phone, password_hash, True, True, created_at
+            user_id, full_name, email, phone, password_hash,
+            is_active, is_verified, is_locked,
+            must_change_password, failed_login_attempts, created_at
         ))
         
         conn.commit()
-        print(f"Test user created successfully!")
-        print(f"Email: {email}")
-        print(f"Password: {password}")
-        print(f"User ID: {user_id}")
+        print(f"✅ Test user created successfully!")
+        print(f"📧 Email: {email}")
+        print(f"🔐 Password: {password}")
+        print(f"🆔 User ID: {user_id}")
         
     except Exception as e:
-        print(f"Error creating user: {e}")
+        print(f"❌ Error creating user: {e}")
         conn.rollback()
     finally:
         cursor.close()
@@ -62,4 +75,3 @@ def create_test_user():
 
 if __name__ == "__main__":
     create_test_user()
-
