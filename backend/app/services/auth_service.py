@@ -66,7 +66,8 @@ class AuthService:
     async def logout(self, token: str) -> dict:
         """Logout user by blacklisting token"""
         # Add token to blacklist
-        blacklist_token(token, self.redis)
+        expires = settings.access_token_expire_minutes * 60
+        blacklist_token(token, self.redis, expires)
         
         return {"message": "Successfully logged out"}
     

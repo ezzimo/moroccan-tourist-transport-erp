@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, Users, DollarSign, MapPin, CheckCircle, UserCog, Package } from 'lucide-react';
-import { Users, MessageSquare, Star, TrendingUp, ArrowRight, Truck, UserCheck, DollarSign, Calendar, Bell, Shield } from 'lucide-react';
+import { ArrowRight, Truck, UserCheck, Bell, Shield } from 'lucide-react';
 import { useCustomers } from '../crm/hooks/useCustomers';
 import { useFeedbackStats } from '../crm/hooks/useFeedback';
 import { useVehicles } from '../fleet/hooks/useVehicles';
@@ -158,26 +158,8 @@ export default function DashboardPage() {
 
       {/* Admin User Management Section */}
       {canManageUsers && (
-        <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-lg p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-bold mb-2 flex items-center">
-                <Shield className="h-6 w-6 mr-2" />
-                Admin Panel
-              </h2>
-              <p className="text-blue-100">
-                Manage users, roles, and system permissions
-              </p>
-            </div>
-            <Link
-              to="/admin/users"
-              className="inline-flex items-center px-4 py-2 bg-white text-blue-600 rounded-lg hover:bg-blue-50 transition-colors font-medium"
-            >
-              <Users className="h-4 w-4 mr-2" />
-              Manage Users
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </Link>
-          </div>
+        <div className="bg-white rounded-lg border p-6">
+          <AdminUserManagement />
         </div>
       )}
 

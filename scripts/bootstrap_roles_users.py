@@ -340,84 +340,124 @@ ROLE_DEFINITIONS = {
 # Demo user definitions
 DEMO_USERS = [
     {
-        "email": "superadmin@demo.local",
+        "email": "superadmin@example.com",
         "full_name": "System Super Administrator",
         "phone": "+212600000001",
         "password": "SuperAdmin123!",
         "roles": ["super_admin"],
-        "is_verified": True
+        "is_verified": True,
+        "is_active": True,
+        "must_change_password": False,
+        "is_locked": False,
+        "avatar_url": None,
     },
     {
-        "email": "admin@demo.local",
+        "email": "admin@example.com",
         "full_name": "Company Administrator",
         "phone": "+212600000002",
         "password": "Admin123!",
         "roles": ["tenant_admin"],
-        "is_verified": True
+        "is_verified": True,
+        "is_active": True,
+        "must_change_password": False,
+        "is_locked": False,
+        "avatar_url": None,
     },
     {
-        "email": "dispatcher@demo.local",
+        "email": "dispatcher@example.com",
         "full_name": "Operations Dispatcher",
         "phone": "+212600000003",
         "password": "Dispatcher123!",
         "roles": ["dispatcher"],
-        "is_verified": True
+        "is_verified": True,
+        "is_active": True,
+        "must_change_password": False,
+        "is_locked": False,
+        "avatar_url": None,
     },
     {
-        "email": "fleetmanager@demo.local",
+        "email": "fleetmanager@example.com",
         "full_name": "Fleet Manager",
         "phone": "+212600000004",
         "password": "Fleet123!",
         "roles": ["fleet_manager"],
-        "is_verified": True
+        "is_verified": True,
+        "is_active": True,
+        "must_change_password": False,
+        "is_locked": False,
+        "avatar_url": None,
     },
     {
-        "email": "driver@demo.local",
+        "email": "driver@example.com",
         "full_name": "Demo Driver",
         "phone": "+212600000005",
         "password": "Driver123!",
         "roles": ["driver"],
-        "is_verified": True
+        "is_verified": True,
+        "is_active": True,
+        "must_change_password": False,
+        "is_locked": False,
+        "avatar_url": None,
     },
     {
-        "email": "hrmanager@demo.local",
+        "email": "hrmanager@example.com",
         "full_name": "HR Manager",
         "phone": "+212600000006",
         "password": "HR123!",
         "roles": ["hr_manager"],
-        "is_verified": True
+        "is_verified": True,
+        "is_active": True,
+        "must_change_password": False,
+        "is_locked": False,
+        "avatar_url": None,
     },
     {
-        "email": "financemanager@demo.local",
+        "email": "financemanager@example.com",
         "full_name": "Finance Manager",
         "phone": "+212600000007",
         "password": "Finance123!",
         "roles": ["finance_manager"],
-        "is_verified": True
+        "is_verified": True,
+        "is_active": True,
+        "must_change_password": False,
+        "is_locked": False,
+        "avatar_url": None,
     },
     {
-        "email": "inventorymanager@demo.local",
+        "email": "inventorymanager@example.com",
         "full_name": "Inventory Manager",
         "phone": "+212600000008",
         "password": "Inventory123!",
         "roles": ["inventory_manager"],
-        "is_verified": True
+        "is_verified": True,
+        "is_active": True,
+        "must_change_password": False,
+        "is_locked": False,
+        "avatar_url": None,
     },
     {
-        "email": "qaofficer@demo.local",
+        "email": "qaofficer@example.com",
         "full_name": "QA Officer",
         "phone": "+212600000009",
         "password": "QA123!",
         "roles": ["qa_officer"],
-        "is_verified": True
+        "is_verified": True,
+        "is_active": True,
+        "must_change_password": False,
+        "is_locked": False,
+        "avatar_url": None,
     },
     {
-        "email": "client@demo.local",
+        "email": "client@example.com",
         "full_name": "Demo Client",
         "phone": "+212600000010",
         "password": "Client123!",
         "roles": ["client_user"],
-        "is_verified": True
+        "is_verified": True,
+        "is_active": True,
+        "must_change_password": False,
+        "is_locked": False,
+        "avatar_url": None,
     }
 ]
 
@@ -436,7 +476,7 @@ class DatabaseConnection:
         
         if self.environment == "production":
             config = {
-                "host": os.getenv("DB_HOST", "localhost"),
+                "host": os.getenv("DB_HOST", "db_auth"),
                 "port": int(os.getenv("DB_PORT", "5432")),
                 "database": os.getenv("DB_NAME", "auth_db"),
                 "user": os.getenv("DB_USER", "postgres"),
@@ -446,7 +486,7 @@ class DatabaseConnection:
         else:
             # Development/testing configuration
             config = {
-                "host": "localhost",
+                "host": "db_auth",
                 "port": 5432,
                 "database": "auth_db",
                 "user": "postgres",
@@ -717,7 +757,7 @@ class RoleUserBootstrap:
         logger.debug(f"   - Roles: {user_data.get('roles', [])}")
         logger.debug(f"   - Is verified: {user_data.get('is_verified', False)}")
         
-        # Hash password with timing
+        # 🔐 Hash password
         logger.debug(f"🔐 Hashing password...")
         hash_start = datetime.utcnow()
         password_hash = pwd_context.hash(user_data['password'])
@@ -725,11 +765,19 @@ class RoleUserBootstrap:
         logger.debug(f"🔐 Password hashed in {hash_time:.3f}s")
         
         created_at = datetime.utcnow()
-        
+
+        # ✅ Ensure all required fields are inserted (no nulls in NOT NULL columns)
         query = """
-            INSERT INTO users (id, full_name, email, phone, password_hash, 
-                             is_active, is_verified, created_at)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            INSERT INTO users (
+                id, full_name, email, phone, password_hash, 
+                is_active, is_verified, is_locked, must_change_password,
+                avatar_url, failed_login_attempts, last_login_at,
+                created_at, updated_at, last_login, deleted_at
+            )
+            VALUES (%s, %s, %s, %s, %s, 
+                    %s, %s, %s, %s, 
+                    %s, %s, %s, 
+                    %s, %s, %s, %s)
         """
         
         params = (
@@ -738,9 +786,17 @@ class RoleUserBootstrap:
             user_data['email'],
             user_data['phone'],
             password_hash,
-            True,  # is_active
-            user_data.get('is_verified', False),
-            created_at
+            True,                                # is_active
+            user_data.get('is_verified', False), # is_verified
+            False,                               # is_locked
+            False,                               # must_change_password
+            user_data.get('avatar_url', None),   # avatar_url
+            0,                                   # failed_login_attempts
+            None,                                # last_login_at
+            created_at,                          # created_at
+            None,                                # updated_at
+            None,                                # last_login
+            None                                 # deleted_at
         )
         
         self.execute_sql(query, params)
@@ -753,6 +809,7 @@ class RoleUserBootstrap:
             logger.info(f"[DRY RUN] ✅ Would create user: {user_data['email']}")
         
         return user_id
+
     
     def assign_user_roles(self, user_id: str, role_names: List[str]):
         """Assign roles to a user with detailed logging"""

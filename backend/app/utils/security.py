@@ -1,11 +1,16 @@
 """
 Security utilities for password hashing and token management
 """
+import uuid
 from passlib.context import CryptContext
+from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional
+from schemas.auth import TokenData
 import secrets
 import string
+import redis
+from config import settings
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -75,33 +80,53 @@ def is_password_strong(password: str) -> tuple[bool, list[str]]:
     return len(errors) == 0, errors
 
 
-
-
 # JWT Token management (placeholder implementations)
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Create JWT access token - placeholder for existing implementation"""
-    # This should be implemented with actual JWT logic
-    # For now, return a placeholder to avoid import errors
-    return "placeholder_token"
+    """Create a JWT access token"""
+    to_encode = data.copy()
+    
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=settings.access_token_expire_minutes)
+    
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+    return encoded_jwt
 
 
-def verify_token(token: str) -> dict:
-    """Verify JWT token - placeholder for existing implementation"""
-    # This should be implemented with actual JWT verification logic
-    # For now, return a placeholder to avoid import errors
-    return {"sub": "placeholder"}
+def verify_token(token: str) -> Optional[TokenData]:
+    """Verify and decode JWT token"""
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        user_id: str = payload.get("sub")
+        email: str = payload.get("email")
+        exp: int = payload.get("exp")
+        
+        if user_id is None or email is None:
+            return None
+            
+        return TokenData(
+            user_id=uuid.UUID(user_id),
+            email=email,
+            exp=exp
+        )
+    except JWTError:
+        return None
 
 
-def blacklist_token(token: str) -> bool:
-    """Blacklist a token - placeholder for existing implementation"""
-    # This should be implemented with actual blacklist logic
-    # For now, return True to avoid import errors
-    return True
+def blacklist_token(token: str, redis_client: redis.Redis, expires_in_seconds: int = None) -> None:
+    """
+    Blacklist a token in Redis.
+    The token is stored with a TTL matching its expiration.
+    """
+    key = f"blacklist:{token}"
+    ttl = expires_in_seconds or settings.access_token_expire_minutes * 60
+    redis_client.setex(key, ttl, "1")
 
 
-def is_token_blacklisted(token: str) -> bool:
-    """Check if token is blacklisted - placeholder for existing implementation"""
-    # This should be implemented with actual blacklist check logic
-    # For now, return False to avoid import errors
-    return False
+def is_token_blacklisted(token: str, redis_client: redis.Redis) -> bool:
+    if redis_client is None:
+        raise RuntimeError("Redis client not available")
+    return redis_client.exists(f"blacklist:{token}") == 1
 
