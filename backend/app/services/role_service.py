@@ -67,53 +67,53 @@ class RoleService:
         statement = select(Role).offset(skip).limit(limit)
         roles = self.session.exec(statement).all()
         return [RoleResponse.model_validate(role) for role in roles]
-    
+
     async def update_role(self, role_id: uuid.UUID, role_data: RoleUpdate) -> RoleResponse:
         """Update role information"""
         statement = select(Role).where(Role.id == role_id)
         role = self.session.exec(statement).first()
-        
+
         if not role:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Role not found"
             )
-        
+
         # Update fields
         update_data = role_data.model_dump(exclude_unset=True)
         permission_ids = update_data.pop("permission_ids", None)
-        
+
         for field, value in update_data.items():
             setattr(role, field, value)
-        
+
         role.updated_at = datetime.utcnow()
-        
+
         # Update permissions if provided
         if permission_ids is not None:
             await self._assign_permissions(role_id, permission_ids)
-        
+
         self.session.add(role)
         self.session.commit()
         self.session.refresh(role)
-        
+
         return RoleResponse.model_validate(role)
-    
+
     async def delete_role(self, role_id: uuid.UUID) -> dict:
         """Delete role"""
         statement = select(Role).where(Role.id == role_id)
         role = self.session.exec(statement).first()
-        
+
         if not role:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Role not found"
             )
-        
+
         self.session.delete(role)
         self.session.commit()
-        
+
         return {"message": "Role deleted successfully"}
-    
+
     # Permission operations
     async def create_permission(self, permission_data: PermissionCreate) -> PermissionResponse:
         """Create a new permission"""
@@ -124,7 +124,7 @@ class RoleService:
             Permission.resource == permission_data.resource
         )
         existing_permission = self.session.exec(statement).first()
-        
+
         if existing_permission:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

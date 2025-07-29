@@ -69,8 +69,8 @@ class User(SQLModel, table=True):
             
         for role in self.roles:
             for permission in role.permissions:
-                if (permission.service_name == service_name and 
-                    permission.action == action and 
+                if (permission.service_name == service_name and
+                    permission.action == action and
                     (permission.resource == resource or permission.resource == "*")):
                     return True
         return False

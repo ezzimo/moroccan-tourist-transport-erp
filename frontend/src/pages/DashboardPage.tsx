@@ -43,7 +43,7 @@ export default function DashboardPage() {
     canManageUsers,
     userEmail: authState.user?.email,
     userRoles: authState.user?.roles?.map(r => r.name),
-    permissions: authState.user?.permissions?.slice(0, 5) // Log first 5 permissions
+    permissions: authState.user?.permissions?.slice(0, 15) // Log first 15 permissions
   });
 
   const stats = [

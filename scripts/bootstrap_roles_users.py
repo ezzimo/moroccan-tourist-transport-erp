@@ -60,7 +60,89 @@ ROLE_DEFINITIONS = {
     "super_admin": {
         "name": "super_admin",
         "description": "System Super Admin with full access to all tenant data, settings, and audit logs",
-        "permissions": ["*:*"],
+        "permissions": [
+            "tenant:create", "tenant:read", "tenant:update", "tenant:delete",
+            "users:create", "users:read", "users:update", "users:delete",
+            "roles:create", "roles:read", "roles:update", "roles:delete",
+            "permissions:create", "permissions:read", "permissions:update",
+            "permissions:delete",
+            "bookings:create", "bookings:read", "bookings:update",
+            "bookings:delete",
+            "routes:create", "routes:read", "routes:update", "routes:delete",
+            "assignments:create", "assignments:read", "assignments:update",
+            "assignments:delete",
+            "drivers:create", "drivers:read", "drivers:update",
+            "drivers:delete",
+            "schedules:create", "schedules:read", "schedules:update",
+            "schedules:delete",
+            "planning:create", "planning:read", "planning:update",
+            "planning:delete",
+            "reservations:create", "reservations:read", "reservations:update",
+            "reservations:delete",
+            "pricing:create", "pricing:read", "pricing:update",
+            "pricing:delete",
+            "customers:create", "customers:read", "customers:update",
+            "customers:delete",
+            "contracts:create", "contracts:read", "contracts:update",
+            "contracts:delete",
+            "feedback:create", "feedback:read", "feedback:update",
+            "feedback:delete",
+            "vehicles:create", "vehicles:read", "vehicles:update",
+            "vehicles:delete",
+            "maintenance:create", "maintenance:read", "maintenance:update",
+            "maintenance:delete",
+            "fuel:create", "fuel:read", "fuel:update", "fuel:delete",
+            "profile:read",
+            "documents:upload",
+            "tasks:read",
+            "incidents:create", "incidents:read", "incidents:update",
+            "incidents:delete",
+            "employees:create", "employees:read", "employees:update",
+            "employees:delete",
+            "training:create", "training:read", "training:update",
+            "training:delete",
+            "recruitment:create", "recruitment:read", "recruitment:update",
+            "recruitment:delete",
+            "applications:create", "applications:read", "applications:update",
+            "applications:delete",
+            "jobs:create", "jobs:read", "jobs:update", "jobs:delete",
+            "invoices:create", "invoices:read", "invoices:update",
+            "invoices:delete",
+            "payments:create", "payments:read", "payments:update",
+            "payments:delete",
+            "expenses:create", "expenses:read", "expenses:update",
+            "expenses:delete",
+            "tax_reports:create", "tax_reports:read", "tax_reports:update",
+            "tax_reports:delete",
+            "reports:read", "ledgers:read",
+            "inventory:create", "inventory:read", "inventory:update",
+            "inventory:delete",
+            "suppliers:create", "suppliers:read", "suppliers:update",
+            "suppliers:delete",
+            "purchase_orders:create", "purchase_orders:read",
+            "purchase_orders:update", "purchase_orders:delete",
+            "stock_movements:create", "stock_movements:read",
+            "stock_movements:update", "stock_movements:delete",
+            "deliveries:update",
+            "audits:create", "audits:read", "audits:update", "audits:delete",
+            "nonconformities:create", "nonconformities:read",
+            "nonconformities:update", "nonconformities:delete",
+            "quality:create", "quality:read", "quality:update",
+            "quality:delete",
+            "compliance:create", "compliance:read", "compliance:update",
+            "compliance:delete",
+            "certifications:create", "certifications:read",
+            "certifications:update", "certifications:delete",
+            "alerts:create",
+            "notifications:send", "notifications:create", "notifications:read",
+            "notifications:update", "notifications:delete",
+            "templates:create", "templates:read", "templates:update",
+            "templates:delete",
+            "campaigns:create", "campaigns:read", "campaigns:update",
+            "campaigns:delete",
+            "messages:create", "messages:read", "messages:update",
+            "messages:delete",
+        ],
         "labels": {
             "en": "System Super Admin",
             "fr": "Super Administrateur Système",
@@ -70,7 +152,14 @@ ROLE_DEFINITIONS = {
     "tenant_admin": {
         "name": "tenant_admin",
         "description": "Company Admin with full control of a company's instance, users, and services",
-        "permissions": ["tenant:*", "users:*", "roles:*"],
+        "permissions": [
+            "tenant:create", "tenant:read", "tenant:update",
+            "tenant:delete",
+            "users:create", "users:read", "users:update",
+            "users:delete",
+            "roles:create", "roles:read", "roles:update",
+            "roles:delete",
+        ],
         "labels": {
             "en": "Company Admin",
             "fr": "Administrateur de l'entreprise",
@@ -80,19 +169,31 @@ ROLE_DEFINITIONS = {
     "role_manager": {
         "name": "role_manager",
         "description": "Can create/edit roles and assign permissions",
-        "permissions": ["roles:create", "roles:read", "roles:update", "permissions:*"],
+        "permissions": [
+            "roles:create", "roles:read", "roles:update", "roles:delete",
+            "permissions:create", "permissions:read", "permissions:update",
+            "permissions:delete",
+        ],
         "labels": {
             "en": "Role Manager",
             "fr": "Gestionnaire des rôles",
             "ar": "مدير الصلاحيات"
         }
     },
-    
+
     # Operational Roles
     "dispatcher": {
         "name": "dispatcher",
         "description": "Manage bookings, routes, driver assignments",
-        "permissions": ["bookings:*", "routes:*", "assignments:*", "drivers:read"],
+        "permissions": [
+            "bookings:create", "bookings:read", "bookings:update",
+            "bookings:delete",
+            "routes:create", "routes:read", "routes:update",
+            "routes:delete",
+            "assignments:create", "assignments:read", "assignments:update",
+            "assignments:delete",
+            "drivers:read",
+        ],
         "labels": {
             "en": "Dispatcher",
             "fr": "Dispatcheur",
@@ -102,7 +203,14 @@ ROLE_DEFINITIONS = {
     "route_planner": {
         "name": "route_planner",
         "description": "Create/edit route templates, scheduling",
-        "permissions": ["routes:*", "schedules:*", "planning:*"],
+        "permissions": [
+            "routes:create", "routes:read", "routes:update",
+            "routes:delete",
+            "schedules:create", "schedules:read", "schedules:update",
+            "schedules:delete",
+            "planning:create", "planning:read", "planning:update",
+            "planning:delete",
+        ],
         "labels": {
             "en": "Route Planner",
             "fr": "Planificateur des trajets",
@@ -112,7 +220,13 @@ ROLE_DEFINITIONS = {
     "booking_manager": {
         "name": "booking_manager",
         "description": "Approve/reschedule/cancel reservations",
-        "permissions": ["bookings:*", "reservations:*", "pricing:read"],
+        "permissions": [
+            "bookings:create", "bookings:read", "bookings:update",
+            "bookings:delete",
+            "reservations:create", "reservations:read", "reservations:update",
+            "reservations:delete",
+            "pricing:read",
+        ],
         "labels": {
             "en": "Booking Manager",
             "fr": "Responsable des réservations",
@@ -122,7 +236,13 @@ ROLE_DEFINITIONS = {
     "client_account_manager": {
         "name": "client_account_manager",
         "description": "Handle key clients, contract terms, special requests",
-        "permissions": ["customers:*", "contracts:*", "feedback:read"],
+        "permissions": [
+            "customers:create", "customers:read", "customers:update",
+            "customers:delete",
+            "contracts:create", "contracts:read", "contracts:update",
+            "contracts:delete",
+            "feedback:read",
+        ],
         "labels": {
             "en": "Client Account Manager",
             "fr": "Gestionnaire de comptes client",
@@ -134,7 +254,15 @@ ROLE_DEFINITIONS = {
     "fleet_manager": {
         "name": "fleet_manager",
         "description": "Manage vehicles, assignments, compliance",
-        "permissions": ["vehicles:*", "maintenance:*", "fuel:*", "assignments:*"],
+        "permissions": [
+            "vehicles:create", "vehicles:read", "vehicles:update",
+            "vehicles:delete",
+            "maintenance:create", "maintenance:read", "maintenance:update",
+            "maintenance:delete",
+            "fuel:create", "fuel:read", "fuel:update", "fuel:delete",
+            "assignments:create", "assignments:read", "assignments:update",
+            "assignments:delete",
+        ],
         "labels": {
             "en": "Fleet Manager",
             "fr": "Gestionnaire de flotte",
@@ -176,7 +304,14 @@ ROLE_DEFINITIONS = {
     "lead_driver": {
         "name": "lead_driver",
         "description": "Driver + ability to supervise/co-sign incidents",
-        "permissions": ["profile:read", "documents:upload", "tasks:read", "incidents:*", "drivers:read"],
+        "permissions": [
+            "profile:read",
+            "documents:upload",
+            "tasks:read",
+            "incidents:create", "incidents:read", "incidents:update",
+            "incidents:delete",
+            "drivers:read",
+        ],
         "labels": {
             "en": "Lead Driver",
             "fr": "Chef Chauffeur",
@@ -188,7 +323,15 @@ ROLE_DEFINITIONS = {
     "hr_manager": {
         "name": "hr_manager",
         "description": "Manage employees, contracts, leaves, training",
-        "permissions": ["employees:*", "contracts:*", "training:*", "recruitment:read"],
+        "permissions": [
+            "employees:create", "employees:read", "employees:update",
+            "employees:delete",
+            "contracts:create", "contracts:read", "contracts:update",
+            "contracts:delete",
+            "training:create", "training:read", "training:update",
+            "training:delete",
+            "recruitment:read",
+        ],
         "labels": {
             "en": "HR Manager",
             "fr": "Responsable RH",
@@ -198,7 +341,14 @@ ROLE_DEFINITIONS = {
     "recruiter": {
         "name": "recruiter",
         "description": "Post jobs, manage applications",
-        "permissions": ["recruitment:*", "applications:*", "jobs:*"],
+        "permissions": [
+            "recruitment:create", "recruitment:read", "recruitment:update",
+            "recruitment:delete",
+            "applications:create", "applications:read", "applications:update",
+            "applications:delete",
+            "jobs:create", "jobs:read", "jobs:update",
+            "jobs:delete",
+        ],
         "labels": {
             "en": "Recruiter",
             "fr": "Recruteur",
@@ -208,7 +358,13 @@ ROLE_DEFINITIONS = {
     "trainer": {
         "name": "trainer",
         "description": "Assign and track driver/staff training",
-        "permissions": ["training:*", "certifications:*", "employees:read"],
+        "permissions": [
+            "training:create", "training:read", "training:update",
+            "training:delete",
+            "certifications:create", "certifications:read", "certifications:update",
+            "certifications:delete",
+            "employees:read"
+        ],
         "labels": {
             "en": "Trainer",
             "fr": "Formateur",
@@ -220,7 +376,16 @@ ROLE_DEFINITIONS = {
     "finance_manager": {
         "name": "finance_manager",
         "description": "Full access to invoices, expenses, tax reports",
-        "permissions": ["invoices:*", "payments:*", "expenses:*", "tax_reports:*"],
+        "permissions": [
+            "invoices:create", "invoices:read", "invoices:update",
+            "invoices:delete",
+            "payments:create", "payments:read", "payments:update",
+            "payments:delete",
+            "expenses:create", "expenses:read", "expenses:update",
+            "expenses:delete",
+            "tax_reports:create", "tax_reports:read", "tax_reports:update",
+            "tax_reports:delete",
+        ],
         "labels": {
             "en": "Finance Manager",
             "fr": "Responsable financier",
@@ -230,7 +395,10 @@ ROLE_DEFINITIONS = {
     "billing_agent": {
         "name": "billing_agent",
         "description": "Issue invoices, track payments",
-        "permissions": ["invoices:create", "invoices:read", "payments:create", "payments:read"],
+        "permissions": [
+            "invoices:create", "invoices:read",
+            "payments:create", "payments:read",
+        ],
         "labels": {
             "en": "Billing Agent",
             "fr": "Agent de facturation",
@@ -240,7 +408,12 @@ ROLE_DEFINITIONS = {
     "accountant": {
         "name": "accountant",
         "description": "View ledgers, manage financial reports",
-        "permissions": ["reports:read", "ledgers:read", "invoices:read", "payments:read"],
+        "permissions": [
+            "reports:read",
+            "ledgers:read",
+            "invoices:read",
+            "payments:read",
+        ],
         "labels": {
             "en": "Accountant",
             "fr": "Comptable",
@@ -252,7 +425,14 @@ ROLE_DEFINITIONS = {
     "inventory_manager": {
         "name": "inventory_manager",
         "description": "Manage items, suppliers, purchase orders",
-        "permissions": ["inventory:*", "suppliers:*", "purchase_orders:*"],
+        "permissions": [
+            "inventory:create", "inventory:read", "inventory:update",
+            "inventory:delete",
+            "suppliers:create", "suppliers:read", "suppliers:update",
+            "suppliers:delete",
+            "purchase_orders:create", "purchase_orders:read",
+            "purchase_orders:update", "purchase_orders:delete",
+        ],
         "labels": {
             "en": "Inventory Manager",
             "fr": "Responsable des stocks",
@@ -262,7 +442,12 @@ ROLE_DEFINITIONS = {
     "warehouse_staff": {
         "name": "warehouse_staff",
         "description": "Record movements, confirm deliveries",
-        "permissions": ["inventory:read", "stock_movements:*", "deliveries:update"],
+        "permissions": [
+            "inventory:read",
+            "stock_movements:create", "stock_movements:read",
+            "stock_movements:update", "stock_movements:delete",
+            "deliveries:update",
+        ],
         "labels": {
             "en": "Warehouse Staff",
             "fr": "Magasinier",
@@ -274,7 +459,13 @@ ROLE_DEFINITIONS = {
     "qa_officer": {
         "name": "qa_officer",
         "description": "Run audits, manage non-conformities",
-        "permissions": ["audits:*", "nonconformities:*", "quality:*"],
+        "permissions": [
+            "audits:create", "audits:read", "audits:update", "audits:delete",
+            "nonconformities:create", "nonconformities:read",
+            "nonconformities:update", "nonconformities:delete",
+            "quality:create", "quality:read", "quality:update",
+            "quality:delete",
+        ],
         "labels": {
             "en": "QA Officer",
             "fr": "Agent qualité",
@@ -284,7 +475,13 @@ ROLE_DEFINITIONS = {
     "compliance_officer": {
         "name": "compliance_officer",
         "description": "Track certifications, vehicle/driver document compliance",
-        "permissions": ["compliance:*", "certifications:*", "documents:read"],
+        "permissions": [
+            "compliance:create", "compliance:read", "compliance:update",
+            "compliance:delete",
+            "certifications:create", "certifications:read",
+            "certifications:update", "certifications:delete",
+            "documents:read",
+        ],
         "labels": {
             "en": "Compliance Officer",
             "fr": "Agent conformité",
@@ -296,7 +493,10 @@ ROLE_DEFINITIONS = {
     "corporate_client_admin": {
         "name": "corporate_client_admin",
         "description": "Book/manage trips for company employees",
-        "permissions": ["bookings:create", "bookings:read", "employees:read", "invoices:read"],
+        "permissions": [
+            "bookings:create", "bookings:read",
+            "employees:read", "invoices:read"
+        ],
         "labels": {
             "en": "Corporate Client Admin",
             "fr": "Admin Client Entreprise",
@@ -306,7 +506,9 @@ ROLE_DEFINITIONS = {
     "client_user": {
         "name": "client_user",
         "description": "View trips, invoices, submit feedback",
-        "permissions": ["bookings:read:own", "invoices:read:own", "feedback:create"],
+        "permissions": [
+            "bookings:read:own", "invoices:read:own", "feedback:create",
+        ],
         "labels": {
             "en": "Individual Client",
             "fr": "Client Individuel",
@@ -318,7 +520,14 @@ ROLE_DEFINITIONS = {
     "communication_manager": {
         "name": "communication_manager",
         "description": "Create/manage notification templates, campaigns",
-        "permissions": ["notifications:*", "templates:*", "campaigns:*"],
+        "permissions": [
+            "notifications:create", "notifications:read", "notifications:update",
+            "notifications:delete",
+            "templates:create", "templates:read", "templates:update",
+            "templates:delete",
+            "campaigns:create", "campaigns:read", "campaigns:update",
+            "campaigns:delete",
+        ],
         "labels": {
             "en": "Communication Manager",
             "fr": "Responsable communication",
@@ -328,7 +537,11 @@ ROLE_DEFINITIONS = {
     "alert_dispatcher": {
         "name": "alert_dispatcher",
         "description": "Trigger real-time messages (delays, issues, etc.)",
-        "permissions": ["alerts:create", "notifications:send", "messages:*"],
+        "permissions": [
+            "alerts:create", "notifications:send",
+            "messages:create", "messages:read", "messages:update",
+            "messages:delete",
+        ],
         "labels": {
             "en": "Alert Dispatcher",
             "fr": "Envoyeur d'alertes",
