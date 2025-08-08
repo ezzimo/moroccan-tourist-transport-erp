@@ -134,9 +134,19 @@ export interface LoginResponse {
   user: User;
 }
 
-export interface UserMeResponse {
-  permissions: string[];
+/**
+ * Response returned by the `/auth/me` endpoint.
+ *
+ * This interface extends the full ``User`` model and overrides
+ * the ``roles`` and ``permissions`` properties.  The backend returns
+ * the complete user record along with role objects and a list of
+ * permission strings.  Extending ``User`` ensures that all other
+ * fields (full_name, phone, status flags, etc.) are available on
+ * responses from the `/auth/me` call.
+ */
+export interface UserMeResponse extends User {
   roles: Role[];
+  permissions: string[];
 }
 
 // Permission constants for user management

@@ -1,5 +1,5 @@
 import apiClient from '../../api/client';
-import { LoginCredentials, LoginResponse, User, UserMeResponse } from '../types/auth';
+import { LoginCredentials, LoginResponse, UserMeResponse } from '../types/auth';
 
 export const authApi = {
   login: async (credentials: LoginCredentials): Promise<LoginResponse> => {
@@ -13,7 +13,7 @@ export const authApi = {
     await apiClient.post('/auth/logout');
   },
 
-  me: async (): Promise<User> => {
+  me: async (): Promise<UserMeResponse> => {
     const response = await apiClient.get('/auth/me');
     return response.data;
   },

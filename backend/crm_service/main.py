@@ -7,7 +7,11 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from config import settings
 from database import create_db_and_tables
-from routers import customers_router, interactions_router, feedback_router, segments_router
+# from routers import customers_router, interactions_router, feedback_router, segments_router
+from routers.customers import router as customers_router
+from routers.interactions import router as interactions_router
+from routers.feedback import router as feedback_router
+from routers.segments import router as segments_router
 import logging
 
 

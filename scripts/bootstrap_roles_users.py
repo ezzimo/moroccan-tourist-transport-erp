@@ -61,6 +61,8 @@ ROLE_DEFINITIONS = {
         "name": "super_admin",
         "description": "System Super Admin with full access to all tenant data, settings, and audit logs",
         "permissions": [
+            "auth:create", "auth:read", "auth:update",
+            "auth:delete",
             "tenant:create", "tenant:read", "tenant:update", "tenant:delete",
             "users:create", "users:read", "users:update", "users:delete",
             "roles:create", "roles:read", "roles:update", "roles:delete",

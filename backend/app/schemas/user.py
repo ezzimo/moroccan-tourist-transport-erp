@@ -1,7 +1,4 @@
-"""
-User schemas for request/response models
-"""
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import uuid
@@ -53,14 +50,26 @@ class UserResponse(UserBase):
     deleted_at: Optional[datetime] = None
 
 
+def to_display_name(name: str) -> str:
+    return name.replace("_", " ").title()
+
+
 class RoleResponse(BaseModel):
     """Schema for role response"""
     model_config = ConfigDict(from_attributes=True)
-    
+
     id: uuid.UUID
     name: str
-    display_name: str
+    display_name: Optional[str] = None
     description: Optional[str] = None
+
+    @field_validator("display_name", mode="before")
+    @classmethod
+    def derive_display_name(cls, v, info):
+        if v is not None:
+            return v
+        name = info.data.get("name")
+        return to_display_name(name) if name else None
 
 
 class UserWithRoles(UserResponse):
@@ -136,4 +145,3 @@ class UserExportRequest(BaseModel):
     format: str = Field("csv", pattern="^(csv|json)$")
     include_deleted: bool = False
     filters: Optional[UserSearchRequest] = None
-

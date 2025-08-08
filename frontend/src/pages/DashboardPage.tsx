@@ -1,5 +1,4 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import { Route, Routes, Link } from 'react-router-dom';
 import { Calendar, Users, DollarSign, MapPin, CheckCircle, UserCog, Package } from 'lucide-react';
 import { ArrowRight, Truck, UserCheck, Bell, Shield } from 'lucide-react';
 import { useCustomers } from '../crm/hooks/useCustomers';

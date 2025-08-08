@@ -61,7 +61,7 @@ class User(SQLModel, table=True):
         link_model=UserRole
     )
     
-    def has_permission(self, service_name: str, action: str, resource: str = "*") -> bool:
+    def has_permission(self, service_name: str, action: str, resource: str ) -> bool:
         """Check if user has specific permission"""
         # Check if user is soft deleted or locked
         if self.deleted_at is not None or self.is_locked:
@@ -71,7 +71,12 @@ class User(SQLModel, table=True):
             for permission in role.permissions:
                 if (permission.service_name == service_name and
                     permission.action == action and
-                    (permission.resource == resource or permission.resource == "*")):
+                    (
+                        (
+                            permission.resource == resource or
+                            permission.resource == "all"
+                        )
+                    )):
                     return True
         return False
     

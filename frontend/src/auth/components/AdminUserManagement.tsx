@@ -14,6 +14,8 @@ import CreateUserModal from './CreateUserModal';
 import EditUserModal from './EditUserModal';
 import UserActivityModal from './UserActivityModal';
 import BulkActionsToolbar from './BulkActionsToolbar';
+import PermissionGate from './PermissionGate';
+
 
 interface AdminUserManagementProps {
   className?: string;
@@ -246,15 +248,15 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
   const handleExport = useCallback(async (format: 'csv' | 'json') => {
     console.log('🔧 AdminUserManagement: Export requested', {
       format,
-      canImportExport,
+      // canImportExport,
       usersCount: users.length
     });
     
-    if (!canImportExport) {
-      console.warn('🔧 AdminUserManagement: No import/export permission');
-      setError('You do not have permission to export users');
-      return;
-    }
+    // if (!canImportExport) {
+    //   console.warn('🔧 AdminUserManagement: No import/export permission');
+    //   setError('You do not have permission to export users');
+    //   return;
+    // }
 
     try {
       console.log('🔧 AdminUserManagement: Starting export');
@@ -267,7 +269,8 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
       });
       setError(err.response?.data?.detail || 'Failed to export users');
     }
-  }, [canImportExport, users.length]);
+  }, [users.length]);
+  // [canImportExport, users.length]);
 
   // Handle refresh
   const handleRefresh = useCallback(() => {
@@ -276,28 +279,21 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
   }, [loadUsers]);
 
   // Permission check
-  if (!canRead && !isAdmin) {
-    console.warn('🔧 AdminUserManagement: Access denied - no permissions');
-    return (
-      <div className={`bg-white rounded-lg border p-8 text-center ${className}`}>
-        <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">Access Denied</h3>
-        <p className="text-gray-500">
-          You do not have permission to access user management.
-        </p>
-      </div>
-    );
-  }
-
-  console.log('🔧 AdminUserManagement: Rendering component', {
-    showFilters,
-    showCreateModal,
-    showEditModal,
-    showActivityModal,
-    usersToRender: users.length
-  });
-
   return (
+    <PermissionGate
+      service="auth"
+      action="read"
+      resource="users"
+      fallback={
+        <div className="bg-white rounded-lg border p-8 text-center">
+          <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Access Denied</h3>
+          <p className="text-gray-500">You do not have permission to access user management.</p>
+        </div>
+      }
+    >
+      {/* ✨ The full admin management UI goes here */}
+      <div className={`space-y-6 ${className}`}>
     <div className={`space-y-6 ${className}`}>
       {/* Header */}
       <div className="bg-white rounded-lg border p-6">
@@ -324,7 +320,8 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
             </button>
 
             {/* Export Button */}
-            {canImportExport && (
+            {/* {canImportExport && ( */}
+            {(
               <div className="relative">
                 <button
                   onClick={() => handleExport('csv')}
@@ -395,7 +392,7 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
             </button>
           </div>
           
-          {selectedUsers.length > 0 && canBulkOperations && (
+          {selectedUsers.length > 0  && (
             <BulkActionsToolbar
               selectedUserIds={selectedUsers}
               onActionComplete={() => {
@@ -482,6 +479,8 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
         />
       )}
     </div>
-  );
+      </div>  
+    </PermissionGate>
+    );
 }
 

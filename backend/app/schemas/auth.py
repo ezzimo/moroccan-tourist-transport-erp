@@ -39,5 +39,26 @@ class PermissionsResponse(BaseModel):
 
 
 # Import here to avoid circular imports
-from .user import UserResponse
+from .user import UserResponse, RoleResponse
 LoginResponse.model_rebuild()
+
+# Added response model for the current authenticated user.  When calling
+# `/auth/me` we want to return the user’s identifier and email along
+# with their role objects and computed permission strings.  Returning
+# the full user record with permissions in a single call makes it
+# straightforward for the frontend AuthContext to populate roles and
+# permissions without needing to reconcile disparate structures.
+
+
+class UserMeResponse(UserResponse):
+    """Schema returned by the `/auth/me` endpoint.
+
+    Extends the base ``UserResponse`` with the roles and permissions
+    lists.  ``UserResponse`` already includes all of the standard
+    user fields (id, full_name, email, phone, status flags, etc.).
+    ``roles`` is a list of ``RoleResponse`` objects and ``permissions``
+    is a list of permission strings.  This shape aligns with the
+    frontend ``User`` type used in the AuthContext.
+    """
+    roles: List[RoleResponse]
+    permissions: List[str]

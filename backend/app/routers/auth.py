@@ -8,8 +8,14 @@ from database import get_session, get_redis
 from services.auth_service import AuthService
 from services.otp_service import OTPService
 from schemas.auth import (
-    LoginRequest, LoginResponse, OTPRequest, OTPVerifyRequest, PermissionsResponse
+    LoginRequest,
+    LoginResponse,
+    OTPRequest,
+    OTPVerifyRequest,
+    PermissionsResponse,
+    UserMeResponse,
 )
+from schemas.user import RoleResponse, UserResponse
 from utils.dependencies import get_current_active_user
 from utils.rate_limiter import check_rate_limit
 from models.user import User
@@ -89,17 +95,44 @@ async def verify_otp(
         )
 
 
-@router.get("/me", response_model=PermissionsResponse)
+@router.get("/me", response_model=UserMeResponse)
 async def get_current_user_info(
     current_user: User = Depends(get_current_active_user)
-):
-    """Get current user information and permissions"""
+) -> UserMeResponse:
+    """Get current user information along with roles and permissions.
+
+    The returned structure contains the user's unique identifier and
+    email address, plus a list of role objects (each with id, name,
+    display_name and description) and all permissions flattened into
+    strings.  This shape matches the frontend `User` type and allows
+    the client to determine admin status without additional calls.
+    """
+    # Compute list of permission strings
     permissions = current_user.get_all_permissions()
-    roles = [role.name for role in current_user.roles]
-    
-    return PermissionsResponse(
+
+    # Build role responses from ORM models.  The RoleResponse pydantic
+    # schema expects `display_name` which our Role model does not
+    # define; we fall back to using the role name for display_name.
+    role_objects = []
+    for role in current_user.roles:
+        role_dict = {
+            "id": role.id,
+            "name": role.name,
+            # Provide a human‑readable display_name; fallback to name
+            "display_name": getattr(role, "display_name", role.name),
+            "description": role.description,
+        }
+        role_objects.append(RoleResponse.model_validate(role_dict))
+
+    # Build a full user response dictionary from the ORM object.  The
+    # UserResponse schema will extract all standard fields from the
+    # SQLModel instance.  We then supply the roles and permissions
+    # explicitly when constructing the ``UserMeResponse``.
+    user_dict = UserResponse.model_validate(current_user).model_dump()
+    return UserMeResponse(
+        **user_dict,
+        roles=role_objects,
         permissions=permissions,
-        roles=roles
     )
 
 

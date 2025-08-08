@@ -2,6 +2,7 @@
 User service for user management operations
 """
 from sqlmodel import Session, select, and_, or_, func, text
+from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 from models.user import User, UserRole
 from models.role import Role
@@ -121,7 +122,7 @@ class UserService:
         """Search users with advanced filtering"""
         
         # Base query
-        query = select(User)
+        query = select(User).options(selectinload(User.roles))
         
         # Apply filters
         conditions = []
@@ -196,7 +197,7 @@ class UserService:
         users = self.session.exec(query).all()
         
         return {
-            "users": [UserResponse.model_validate(user) for user in users],
+            "users": [UserWithRoles.model_validate(user) for user in users],
             "total": total,
             "skip": skip,
             "limit": limit,

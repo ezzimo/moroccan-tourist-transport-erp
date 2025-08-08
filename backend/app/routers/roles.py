@@ -29,10 +29,10 @@ async def create_role(
     return await role_service.create_role(role_data)
 
 
-@router.get("/", response_model=List[RoleResponse])
+@router.get("/", response_model=List[RoleWithPermissions])
 async def get_roles(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    skip: int = 0,
+    limit: int = 100,
     session: Session = Depends(get_session),
     _: None = Depends(require_permission("auth", "read", "roles"))
 ):

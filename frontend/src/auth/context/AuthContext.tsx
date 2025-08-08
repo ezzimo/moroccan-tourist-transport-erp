@@ -130,6 +130,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         type: 'LOGIN_SUCCESS',
         payload: { user, token: access_token, expiresIn: expires_in },
       });
+
+      // 🔄 Immediately refresh the user context with full role & permission
+      // details.  The login response only contains basic user info; the
+      // `/auth/me` endpoint returns roles and permissions.  Without this
+      // extra call the AuthContext would not populate isAdmin and
+      // permission checks correctly until the next page refresh.
+      try {
+        const userData = await authApi.me();
+        dispatch({ type: 'SET_USER', payload: userData as unknown as User });
+      } catch (err) {
+        console.error('Failed to fetch full user data after login:', err);
+      }
     } catch (error: any) {
       const message = error.response?.data?.detail || 'Login failed';
       dispatch({ type: 'LOGIN_ERROR', payload: message });
@@ -171,36 +183,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   // Check if user has specific permission
-  const hasPermission = (resource: string, action: string, scope: string = "*"): boolean => {
-    if (!state.user || !state.user.permissions) {
-      return false;
+
+  // ✅ UPDATED `hasPermission` in `AuthContext.tsx` to support `resource=all` logic.
+
+  const hasPermission = (service: string, action: string, resource: string = 'all'): boolean => {
+    if (!state.user || !state.user.permissions) return false;
+
+    const permissionVariants = [
+      `${service}:${action}:${resource}`,       // Exact match
+      `${service}:${action}:all`,               // Allow if resource is 'all'
+      `${service}:${action}:*`,                 // Wildcard resource
+      `${service}:*:${resource}`,               // Wildcard action
+      `${service}:*:*`,                         // Full service access
+      `*:*:*`                                   // Super admin
+    ];
+
+    const result = permissionVariants.some(p => state.user!.permissions.includes(p));
+
+    if (!result) {
+      console.warn('[RBAC] ⛔ Permission denied:', {
+        attempted: `${service}:${action}:${resource}`,
+        user: state.user.email,
+        available: state.user.permissions,
+      });
+    } else {
+      console.log('[RBAC] ✅ Permission granted:', `${service}:${action}:${resource}`);
     }
 
-    // Check for exact permission match
-    const exactPermission = `${resource}:${action}:${scope}`;
-    if (state.user.permissions.includes(exactPermission)) {
-      return true;
-    }
-
-    // Check for wildcard scope permission
-    const wildcardPermission = `${resource}:${action}:*`;
-    if (state.user.permissions.includes(wildcardPermission)) {
-      return true;
-    }
-
-    // Check for admin permissions (full access)
-    const adminPermission = `${resource}:*:*`;
-    if (state.user.permissions.includes(adminPermission)) {
-      return true;
-    }
-
-    // Check for super admin (all permissions)
-    if (state.user.permissions.includes("*:*:*")) {
-      return true;
-    }
-
-    return false;
+    return result;
   };
+
+  // ✨ Use case in `AdminUserManagement.tsx`
+  const canRead = hasPermission('auth', 'read', 'users');
+  const canCreate = hasPermission('auth', 'create', 'users');
+  // ... etc
+
+  // ✅ This now works properly even if your DB only stores `auth:read:all` or `auth:*:*`
+  // and the call uses `hasPermission('auth', 'read', 'users')`
+
+  // const hasPermission = (resource: string, action: string, scope: string = "*"): boolean => {
+  //   if (!state.user || !state.user.permissions) {
+  //     return false;
+  //   }
+
+  //   // Check for exact permission match
+  //   const exactPermission = `${resource}:${action}:${scope}`;
+  //   if (state.user.permissions.includes(exactPermission)) {
+  //     return true;
+  //   }
+
+  //   // Check for wildcard scope permission
+  //   const wildcardPermission = `${resource}:${action}:*`;
+  //   if (state.user.permissions.includes(wildcardPermission)) {
+  //     return true;
+  //   }
+
+  //   // Check for admin permissions (full access)
+  //   const adminPermission = `${resource}:*:*`;
+  //   if (state.user.permissions.includes(adminPermission)) {
+  //     return true;
+  //   }
+
+  //   // Check for super admin (all permissions)
+  //   if (state.user.permissions.includes("*:*:*")) {
+  //     return true;
+  //   }
+
+  //   return false;
+  // };
 
   // Check if user is admin
   const isAdmin = (): boolean => {

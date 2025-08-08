@@ -38,7 +38,7 @@ async def get_customers(
     tags: Optional[List[str]] = Query(None, description="Filter by tags"),
     is_active: Optional[bool] = Query(True, description="Filter by active status"),
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_permission("crm", "read", "customers"))
+    current_user: CurrentUser = Depends(require_permission("customers", "read"))
 ):
     """Get list of customers with optional search and filters"""
     customer_service = CustomerService(session)

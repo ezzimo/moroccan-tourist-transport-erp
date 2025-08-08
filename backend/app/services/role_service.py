@@ -2,6 +2,7 @@
 Role and Permission service for RBAC operations
 """
 from sqlmodel import Session, select
+from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
 from models.role import Role, RolePermission
 from models.permission import Permission
@@ -62,11 +63,16 @@ class RoleService:
         
         return RoleWithPermissions.model_validate(role)
     
-    async def get_roles(self, skip: int = 0, limit: int = 100) -> List[RoleResponse]:
-        """Get list of roles"""
-        statement = select(Role).offset(skip).limit(limit)
+    async def get_roles(self, skip: int = 0, limit: int = 100) -> List[RoleWithPermissions]:
+        """Get list of roles with permissions"""
+        statement = (
+            select(Role)
+            .options(selectinload(Role.permissions))
+            .offset(skip)
+            .limit(limit)
+        )
         roles = self.session.exec(statement).all()
-        return [RoleResponse.model_validate(role) for role in roles]
+        return [RoleWithPermissions.model_validate(role) for role in roles]
 
     async def update_role(self, role_id: uuid.UUID, role_data: RoleUpdate) -> RoleResponse:
         """Update role information"""
