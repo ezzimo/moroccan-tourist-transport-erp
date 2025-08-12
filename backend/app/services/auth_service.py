@@ -1,9 +1,10 @@
 """
-Authentication service for login/logout operations
+Authentication service for login/logout operations (async API, threadpool-backed)
 """
 
 from sqlmodel import Session, select
 from fastapi import HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from models.user import User
 from schemas.auth import LoginRequest, LoginResponse
 from schemas.user import UserResponse
@@ -29,19 +30,27 @@ class AuthService:
         self.session = session
         self.redis = redis_client
 
+    # -------------------- Public async wrappers --------------------
+
     async def login(self, login_data: LoginRequest) -> LoginResponse:
-        """Authenticate user and return JWT token"""
+        return await run_in_threadpool(self._login_sync, login_data)
+
+    async def logout(self, token: str) -> dict:
+        return await run_in_threadpool(self._logout_sync, token)
+
+    async def verify_token(self, token: str) -> User:
+        return await run_in_threadpool(self._verify_token_sync, token)
+
+    # -------------------- Internal sync implementations --------------------
+
+    def _login_sync(self, login_data: LoginRequest) -> LoginResponse:
         assert self.session is not None, "DB session required for login"
 
-        # Locate user
         logger.info("Login attempt for email=%s", login_data.email)
         statement = select(User).where(User.email == login_data.email)
         user = self.session.exec(statement).first()
 
-        if (
-            not user or
-            not verify_password(login_data.password, user.password_hash)
-        ):
+        if not user or not verify_password(login_data.password, user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",
@@ -53,13 +62,11 @@ class AuthService:
                 detail="User account is disabled",
             )
 
-        # Update last login timestamp (use last_login_at)
         user.last_login_at = datetime.utcnow()
         self.session.add(user)
         self.session.commit()
         self.session.refresh(user)
 
-        # Build access token
         expires = timedelta(minutes=settings.access_token_expire_minutes)
         access_token = create_access_token(
             sub=user.id,
@@ -76,17 +83,13 @@ class AuthService:
             user=UserResponse.model_validate(user),
         )
 
-    async def logout(self, token: str) -> dict:
-        """Logout user by blacklisting token (JTI‑based)"""
-        # Blacklist by JTI with TTL = token lifetime
+    def _logout_sync(self, token: str) -> dict:
         expires = settings.access_token_expire_minutes * 60
         blacklist_token(token, self.redis, expires_in_seconds=expires)
         logger.info("Logout: token blacklisted")
         return {"message": "Successfully logged out"}
 
-    async def verify_token(self, token: str) -> User:
-        """Verify token and return user"""
-
+    def _verify_token_sync(self, token: str) -> User:
         assert self.session is not None, "DB session required for verify_token"
 
         if is_token_blacklisted(token, self.redis):
@@ -96,10 +99,8 @@ class AuthService:
             )
 
         token_data = decode_jwt(token)
-
         logger.debug(
-            "Verifying token for user_id=%s",
-            token_data.user_id if token_data else None,
+            "Verifying token for user_id=%s", getattr(token_data, "user_id", None)
         )
         if not token_data:
             raise HTTPException(
@@ -109,7 +110,6 @@ class AuthService:
 
         statement = select(User).where(User.id == token_data.user_id)
         user = self.session.exec(statement).first()
-
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

@@ -1,11 +1,12 @@
 """
-OTP service for one-time password operations
+OTP service for one-time password operations (async API, threadpool-backed)
 """
 
 import random
 import string
-from datetime import datetime, timedelta
+from datetime import datetime
 from fastapi import HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from config import settings
 import redis
 import json
@@ -17,13 +18,20 @@ class OTPService:
     def __init__(self, redis_client: redis.Redis):
         self.redis = redis_client
 
-    def generate_otp(self) -> str:
-        """Generate a 6-digit OTP"""
+    # Public async wrappers
+    async def send_otp(self, email: str, purpose: str = "verification") -> dict:
+        return await run_in_threadpool(self._send_otp_sync, email, purpose)
+
+    async def verify_otp(
+        self, email: str, otp_code: str, purpose: str = "verification"
+    ) -> bool:
+        return await run_in_threadpool(self._verify_otp_sync, email, otp_code, purpose)
+
+    # Internal sync
+    def _generate_otp_sync(self) -> str:
         return "".join(random.choices(string.digits, k=6))
 
-    async def send_otp(self, email: str, purpose: str = "verification") -> dict:
-        """Send OTP to user (mocked implementation)"""
-        # Check if there's an active OTP
+    def _send_otp_sync(self, email: str, purpose: str = "verification") -> dict:
         otp_key = f"otp:{email}:{purpose}"
         existing_otp = self.redis.get(otp_key)
 
@@ -35,8 +43,7 @@ class OTPService:
                     detail="Maximum OTP attempts exceeded. Please try again later.",
                 )
 
-        # Generate new OTP
-        otp_code = self.generate_otp()
+        otp_code = self._generate_otp_sync()
         otp_data = {
             "code": otp_code,
             "email": email,
@@ -45,23 +52,23 @@ class OTPService:
             "attempts": 0,
         }
 
-        # Store OTP in Redis with expiration
         self.redis.setex(
             otp_key, settings.otp_expire_minutes * 60, json.dumps(otp_data)
         )
 
-        # Mock SMS/Email sending
-        await self._mock_send_otp(email, otp_code, purpose)
+        # MOCK delivery
+        print(
+            f"[MOCK OTP] Sending OTP to {email} | Code: {otp_code} | Purpose: {purpose}"
+        )
 
         return {
             "message": f"OTP sent to {email}",
             "expires_in": settings.otp_expire_minutes * 60,
         }
 
-    async def verify_otp(
+    def _verify_otp_sync(
         self, email: str, otp_code: str, purpose: str = "verification"
     ) -> bool:
-        """Verify OTP code"""
         otp_key = f"otp:{email}:{purpose}"
         otp_data_str = self.redis.get(otp_key)
 
@@ -72,8 +79,6 @@ class OTPService:
             )
 
         otp_data = json.loads(otp_data_str)
-
-        # Check attempts
         if otp_data.get("attempts", 0) >= settings.otp_max_attempts:
             self.redis.delete(otp_key)
             raise HTTPException(
@@ -81,30 +86,16 @@ class OTPService:
                 detail="Maximum OTP attempts exceeded",
             )
 
-        # Increment attempts
         otp_data["attempts"] += 1
         self.redis.setex(
             otp_key, settings.otp_expire_minutes * 60, json.dumps(otp_data)
         )
 
-        # Verify code
         if otp_data["code"] != otp_code:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP code"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid OTP code",
             )
 
-        # Delete OTP after successful verification
         self.redis.delete(otp_key)
         return True
-
-    async def _mock_send_otp(self, email: str, otp_code: str, purpose: str):
-        """Mock OTP delivery via SMS/Email"""
-        print(f"[MOCK OTP] Sending OTP to {email}")
-        print(f"[MOCK OTP] Code: {otp_code}")
-        print(f"[MOCK OTP] Purpose: {purpose}")
-        print(f"[MOCK OTP] Expires in: {settings.otp_expire_minutes} minutes")
-
-        # In production, integrate with:
-        # - SMS provider (e.g., Twilio, AWS SNS)
-        # - Email service (e.g., SendGrid, AWS SES)
-        # For Morocco: consider local SMS gateways
