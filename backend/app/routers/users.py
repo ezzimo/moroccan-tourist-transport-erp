@@ -36,7 +36,7 @@ async def create_user(
     )
 
 
-@router.get("/", response_model=List[UserResponse])
+@router.get("/", response_model=list[UserResponse])
 async def get_users(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -48,7 +48,7 @@ async def get_users(
     return await user_service.get_users(skip=skip, limit=limit)
 
 
-@router.get("/search", response_model=Dict[str, Any])
+@router.get("/search", response_model=dict[str, Any])
 async def search_users(
     search: Optional[str] = Query(None, description="Search term for name, email, or phone"),
     role_ids: Optional[str] = Query(None, description="Comma-separated role IDs"),
@@ -152,7 +152,7 @@ async def delete_user(
 @router.put("/{user_id}/roles")
 async def assign_roles(
     user_id: uuid.UUID,
-    role_data: Dict[str, List[str]],
+    role_data: dict[str, list[str]],
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
     _: None = Depends(require_permission("auth", "update", "users"))
@@ -177,7 +177,7 @@ async def assign_roles(
 @router.put("/{user_id}/status")
 async def update_user_status(
     user_id: uuid.UUID,
-    status_data: Dict[str, Any],
+    status_data: dict[str, Any],
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
     _: None = Depends(require_permission("auth", "update", "users"))
@@ -204,7 +204,7 @@ async def update_user_status(
 @router.post("/{user_id}/reset-password")
 async def reset_password(
     user_id: uuid.UUID,
-    password_data: Optional[Dict[str, str]] = None,
+    password_data: Optional[dict[str, str]] = None,
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
     _: None = Depends(require_permission("auth", "update", "users"))
@@ -297,41 +297,41 @@ async def export_users(
         skip=0,
         limit=10000  # Large limit for export
     )
-    
+
     users = result["users"]
-    
+
     if format == "csv":
         # Create CSV
         output = io.StringIO()
         writer = csv.writer(output)
-        
+
         # Write header
         writer.writerow([
             "ID", "Full Name", "Email", "Phone", "Is Active", "Is Verified", 
-            "Is Locked", "Must Change Password", "Created At", "Last Login"
+            "Is Locked", "Must Change Password", "Created At", "Last Login At"
         ])
-        
+
         # Write data
         for user in users:
             writer.writerow([
                 str(user.id), user.full_name, user.email, user.phone,
                 user.is_active, user.is_verified, user.is_locked,
-                user.must_change_password, user.created_at, user.last_login
+                user.must_change_password, user.created_at, user.last_login_at
             ])
-        
+
         output.seek(0)
-        
+
         return StreamingResponse(
             io.BytesIO(output.getvalue().encode()),
             media_type="text/csv",
             headers={"Content-Disposition": "attachment; filename=users_export.csv"}
         )
-    
+
     elif format == "json":
         # Create JSON
         users_data = [user.model_dump() for user in users]
         json_data = json.dumps(users_data, indent=2, default=str)
-        
+
         return StreamingResponse(
             io.BytesIO(json_data.encode()),
             media_type="application/json",

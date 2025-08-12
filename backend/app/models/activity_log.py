@@ -43,11 +43,11 @@ class ActivityLog(SQLModel, table=True):
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
     
-    def set_metadata(self, data: Dict[str, Any]):
+    def set_metadata(self, data: dict[str, Any]):
         """Set metadata as JSON string"""
         self.extra_data = json.dumps(data) if data else None
     
-    def get_metadata(self) -> Dict[str, Any]:
+    def get_metadata(self) -> dict[str, Any]:
         """Get metadata as dictionary"""
         if self.extra_data:
             try:
@@ -66,7 +66,7 @@ class ActivityLog(SQLModel, table=True):
         description: str,
         target_user_id: Optional[uuid.UUID] = None,
         target_user_email: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: Optional[dict[str, Any]] = None,
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None
     ) -> "ActivityLog":

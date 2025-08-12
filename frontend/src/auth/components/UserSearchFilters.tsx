@@ -436,7 +436,7 @@ const UserSearchFilters = memo(function UserSearchFilters({
           >
             <option value="created_at">Created Date</option>
             <option value="updated_at">Updated Date</option>
-            <option value="last_login_at">Last Login</option>
+            <option value="last_login_at">Last Login At</option>
             <option value="full_name">Name</option>
             <option value="email">Email</option>
           </select>

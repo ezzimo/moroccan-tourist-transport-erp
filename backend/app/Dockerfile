@@ -4,6 +4,7 @@ FROM python:3.11-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
 # Create working directory
 WORKDIR /app
@@ -15,8 +16,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy app source code
 COPY . .
 
+# Copy entrypoint script and make it executable
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Expose port
 EXPOSE 8000
 
-# Run the FastAPI app with uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run entrypoint (wait for DB, run migrations, start app)
+ENTRYPOINT ["/app/entrypoint.sh"]

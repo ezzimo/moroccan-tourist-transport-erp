@@ -1,7 +1,7 @@
 """
 Authentication-related Pydantic schemas
 """
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 import uuid
 
@@ -22,6 +22,8 @@ class TokenData(BaseModel):
     user_id: Optional[uuid.UUID] = None
     email: Optional[str] = None
     exp: Optional[int] = None
+    jti: Optional[str] = None
+    scopes: list[str] = Field(default_factory=list)
 
 
 class OTPRequest(BaseModel):
@@ -34,15 +36,15 @@ class OTPVerifyRequest(BaseModel):
 
 
 class PermissionsResponse(BaseModel):
-    permissions: List[str]
-    roles: List[str]
+    permissions: list[str]
+    roles: list[str]
 
 
 # Import here to avoid circular imports
 from .user import UserResponse, RoleResponse
 LoginResponse.model_rebuild()
 
-# Added response model for the current authenticated user.  When calling
+# Added response model for the current authenticated users.  When calling
 # `/auth/me` we want to return the user’s identifier and email along
 # with their role objects and computed permission strings.  Returning
 # the full user record with permissions in a single call makes it
@@ -60,5 +62,5 @@ class UserMeResponse(UserResponse):
     is a list of permission strings.  This shape aligns with the
     frontend ``User`` type used in the AuthContext.
     """
-    roles: List[RoleResponse]
-    permissions: List[str]
+    roles: list[RoleResponse]
+    permissions: list[str]

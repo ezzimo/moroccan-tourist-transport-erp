@@ -1,13 +1,23 @@
 fastapi
 uvicorn[standard]
-sqlmodel
+
+# Pydantic v2 stack
 pydantic
+pydantic-core
+pydantic-settings
+
+# ORMs / DB
+sqlmodel
 psycopg2-binary
+
+# Cache / utils
 redis
 python-dotenv
 python-jose
 passlib==1.7.4
 bcrypt==3.2.0
-pydantic-settings
-email-validator>=1.3.1
-python-multipart>=0.0.6
+email-validator>=2.1.1
+python-multipart>=0.0.9
+
+# Migrations
+alembic==1.13.1

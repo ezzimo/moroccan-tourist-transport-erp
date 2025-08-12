@@ -19,9 +19,9 @@ engine = create_engine(
 redis_client = redis.from_url(settings.redis_url, decode_responses=True)
 
 
-def create_db_and_tables():
-    """Create database tables"""
-    SQLModel.metadata.create_all(engine)
+# def create_db_and_tables():
+#     """Create database tables"""
+#     SQLModel.metadata.create_all(engine)
 
 
 def get_session() -> Generator[Session, None, None]:

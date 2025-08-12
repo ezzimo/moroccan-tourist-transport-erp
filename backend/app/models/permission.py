@@ -29,7 +29,7 @@ class Permission(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     # Relationships
-    roles: List["Role"] = Relationship(
+    roles: list["Role"] = Relationship(
         back_populates="permissions",
         link_model=RolePermission
     )

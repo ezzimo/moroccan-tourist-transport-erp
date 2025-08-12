@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator
-from typing import Optional, List, Dict, Any
+from typing import Optional, Any
 from datetime import datetime
 import uuid
 
@@ -14,7 +14,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for creating a user"""
     password: str = Field(..., min_length=8)
-    role_ids: Optional[List[uuid.UUID]] = None
+    role_ids: Optional[list[uuid.UUID]] = None
     is_verified: Optional[bool] = False
     must_change_password: Optional[bool] = False
     avatar_url: Optional[str] = None
@@ -30,7 +30,7 @@ class UserUpdate(BaseModel):
     is_locked: Optional[bool] = None
     must_change_password: Optional[bool] = None
     avatar_url: Optional[str] = None
-    role_ids: Optional[List[uuid.UUID]] = None
+    role_ids: Optional[list[uuid.UUID]] = None
 
 
 class UserResponse(UserBase):
@@ -74,19 +74,19 @@ class RoleResponse(BaseModel):
 
 class UserWithRoles(UserResponse):
     """Schema for user with roles"""
-    roles: List[RoleResponse] = []
+    roles: list[RoleResponse] = Field(default_factory=list)
 
 
 class BulkUserUpdate(BaseModel):
     """Schema for bulk user updates"""
-    user_ids: List[uuid.UUID] = Field(..., min_items=1)
-    status_updates: Dict[str, Any] = Field(..., min_items=1)
+    user_ids: list[uuid.UUID] = Field(..., min_length=1)
+    status_updates: dict[str, Any] = Field(..., min_length=1)
 
 
 class UserSearchRequest(BaseModel):
     """Schema for user search request"""
     search: Optional[str] = None
-    role_ids: Optional[List[uuid.UUID]] = None
+    role_ids: Optional[list[uuid.UUID]] = None
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
     is_locked: Optional[bool] = None
@@ -109,7 +109,7 @@ class UserActivityResponse(BaseModel):
     description: str
     actor_email: str
     target_user_email: Optional[str] = None
-    metadata: Dict[str, Any] = {}
+    metadata: dict[str, Any] = Field(default_factory=dict)
     ip_address: Optional[str] = None
     created_at: str
 
@@ -121,7 +121,7 @@ class PasswordResetRequest(BaseModel):
 
 class RoleAssignmentRequest(BaseModel):
     """Schema for role assignment request"""
-    role_ids: List[uuid.UUID] = Field(..., min_items=0)
+    role_ids: list[uuid.UUID] = Field(..., min_length=0)
 
 
 class UserStatusUpdate(BaseModel):
@@ -137,7 +137,7 @@ class UserImportResult(BaseModel):
     message: str
     created_count: int
     error_count: int
-    errors: List[str] = []
+    errors: list[str] = Field(default_factory=list)
 
 
 class UserExportRequest(BaseModel):

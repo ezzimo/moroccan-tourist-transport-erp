@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from config import settings
-from database import create_db_and_tables
+# from database import create_db_and_tables
 from routers import auth_router, users_router, roles_router
 import logging
 
@@ -18,7 +18,10 @@ logger = logging.getLogger(__name__)
 # Create FastAPI app
 app = FastAPI(
     title="Auth & Authorization Microservice",
-    description="Secure authentication and authorization service for Moroccan tourist transport ERP",
+    description=(
+        "Secure authentication and authorization service for "
+        "Moroccan tourist transport ERP"
+    ),
     version="1.0.0",
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None
@@ -27,16 +30,20 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins,
+    allow_origins=settings.allowed_origins if not settings.debug else ["*"],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    max_age=600,
 )
 
 
 # Exception handlers
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
+async def validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError
+):
     """Handle validation errors"""
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -58,11 +65,11 @@ async def internal_server_error_handler(request: Request, exc: Exception):
 
 
 # Startup event
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database and create tables"""
-    create_db_and_tables()
-    logger.info("Database initialized successfully")
+# @app.on_event("startup")
+# async def startup_event():
+#     """Initialize database and create tables"""
+#     create_db_and_tables()
+#     logger.info("Database initialized successfully")
 
 
 # Health check
@@ -119,8 +126,16 @@ async def root():
     return {
         "service": "Authentication & Authorization Microservice",
         "version": "1.0.0",
-        "description": "Secure auth service for Moroccan tourist transport ERP",
-        "docs": "/docs" if settings.debug else "Documentation disabled in production"
+        "description": (
+            "Secure auth service for Moroccan tourist transport ERP"
+        ),
+        "docs": (
+            (
+                "/docs"
+                if settings.debug
+                else "Documentation disabled in production"
+            )
+        )
     }
 
 

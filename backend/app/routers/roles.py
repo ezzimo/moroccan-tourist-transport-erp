@@ -29,7 +29,7 @@ async def create_role(
     return await role_service.create_role(role_data)
 
 
-@router.get("/", response_model=List[RoleWithPermissions])
+@router.get("/", response_model=list[RoleWithPermissions])
 async def get_roles(
     skip: int = 0,
     limit: int = 100,
@@ -87,7 +87,7 @@ async def create_permission(
     return await role_service.create_permission(permission_data)
 
 
-@router.get("/permissions", response_model=List[PermissionResponse])
+@router.get("/permissions", response_model=list[PermissionResponse])
 async def get_permissions(
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),

@@ -544,7 +544,7 @@ const EditUserModal = memo(function EditUserModal({
                     <div className="font-medium">{user.failed_login_attempts || 0}</div>
                   </div>
                   <div>
-                    <div className="text-gray-500">Last Login</div>
+                    <div className="text-gray-500">Last Login At</div>
                     <div className="font-medium">
                       {user.last_login_at 
                         ? new Date(user.last_login_at).toLocaleDateString()

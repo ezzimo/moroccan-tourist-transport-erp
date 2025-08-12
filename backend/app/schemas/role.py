@@ -1,7 +1,7 @@
 """
 Role and Permission-related Pydantic schemas
 """
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List
 from datetime import datetime
 import uuid
@@ -30,13 +30,13 @@ class RoleBase(BaseModel):
 
 
 class RoleCreate(RoleBase):
-    permission_ids: Optional[List[uuid.UUID]] = []
+    permission_ids: Optional[list[uuid.UUID]] = Field(default_factory=list)
 
 
 class RoleUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    permission_ids: Optional[List[uuid.UUID]] = None
+    permission_ids: Optional[list[uuid.UUID]] = None
 
 
 class RoleResponse(RoleBase):
@@ -48,5 +48,5 @@ class RoleResponse(RoleBase):
 
 
 class RoleWithPermissions(RoleResponse):
-    permissions: List[PermissionResponse]
+    permissions: list[PermissionResponse]
     model_config = ConfigDict(from_attributes=True)

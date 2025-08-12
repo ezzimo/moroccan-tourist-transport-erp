@@ -1,65 +1,117 @@
-"""
-Rate limiting utilities for API endpoints
-"""
-from fastapi import HTTPException, Request, status
-from datetime import datetime, timedelta
+# utils/rate_limiter.py
+from fastapi import HTTPException, Request, status, Depends
+from datetime import timedelta
 import redis
-from typing import Optional
+from typing import Optional, Callable
+from database import get_redis
+
+TRUSTED_PROXY_HOPS = 1  # set to how many proxies you trust adding XFF
+
+
+def _client_ip(request: Request) -> str:
+    # Try X-Forwarded-For if behind a trusted proxy
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if parts:
+            idx = max(0, len(parts) - 1 - TRUSTED_PROXY_HOPS)
+            return parts[idx]
+    # Fallback
+    return request.client.host if request.client else "unknown"
 
 
 class RateLimiter:
-    """Rate limiter using Redis for tracking attempts"""
-    
-    def __init__(self, redis_client: redis.Redis, max_attempts: int, window_minutes: int):
+    """Atomic Redis-backed rate limiter (fixed window)."""
+
+    def __init__(self, redis_client, max_attempts: int, window_minutes: int, key: str):
         self.redis = redis_client
-        self.max_attempts = max_attempts
-        self.window_seconds = window_minutes * 60
-    
-    def is_allowed(self, identifier: str) -> bool:
-        """Check if request is allowed based on rate limit"""
-        key = f"rate_limit:{identifier}"
-        current_attempts = self.redis.get(key)
-        
-        if current_attempts is None:
-            # First attempt
-            self.redis.setex(key, self.window_seconds, 1)
-            return True
-        
-        if int(current_attempts) >= self.max_attempts:
-            return False
-        
-        # Increment counter
-        self.redis.incr(key)
-        return True
-    
-    def get_attempts(self, identifier: str) -> int:
-        """Get current number of attempts"""
-        attempts = self.redis.get(f"rate_limit:{identifier}")
-        return int(attempts) if attempts else 0
-    
-    def reset(self, identifier: str):
-        """Reset rate limit counter"""
-        self.redis.delete(f"rate_limit:{identifier}")
+        self.max_attempts = int(max_attempts)
+        self.window = int(window_minutes) * 60  # seconds
+        self.key = key
+
+    def check_or_raise(self) -> None:
+        """
+        Increments a counter for `self.key` and applies an expiry on
+        first use of the window. If attempts exceed `self.max_attempts`,
+        raises HTTP 429 with a remaining-seconds hint.
+        """
+        try:
+            pipe = self.redis.pipeline()
+            pipe.incr(self.key)
+            pipe.ttl(self.key)
+            count, ttl = pipe.execute()
+
+            # If key exists but has no TTL, enforce our window
+            if ttl == -1:
+                self.redis.expire(self.key, self.window)
+                ttl = self.window
+
+            # If this is the first attempt (new key), set the window
+            if count == 1:
+                self.redis.expire(self.key, self.window)
+                ttl = self.window
+
+            if count > self.max_attempts:
+                remaining = ttl if isinstance(ttl, int) and ttl > 0 else self.window
+                # Message aligned with tests: must contain
+                # "Rate limit exceeded"
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail=f"Rate limit exceeded. Try again in {remaining} seconds.",
+                )
+        except HTTPException:
+            raise
+        except Exception:
+            # Fail-open on Redis errors so auth/OTP still works if Redis is down
+            return
+
+    # Optional helpers (not used by tests but kept functional)
+    def is_allowed(self, key: str) -> bool:
+        pipe = self.redis.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, self.window)
+        count, _ = pipe.execute()
+        return int(count) <= self.max_attempts
+
+    def attempts(self, key: str) -> int:
+        val = self.redis.get(key)
+        return int(val) if val else 0
 
 
-def check_rate_limit(
-    request: Request,
-    redis_client: redis.Redis,
+def rate_limit_dependency(
+    *,
     max_attempts: int = 5,
-    window_minutes: int = 1,
-    identifier_func: Optional[callable] = None
-) -> None:
-    """Check rate limit for request"""
-    if identifier_func:
-        identifier = identifier_func(request)
-    else:
-        identifier = request.client.host
-    
-    rate_limiter = RateLimiter(redis_client, max_attempts, window_minutes)
-    
-    if not rate_limiter.is_allowed(identifier):
-        attempts = rate_limiter.get_attempts(identifier)
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Rate limit exceeded. {attempts}/{max_attempts} attempts. Try again later."
+    window: timedelta = timedelta(minutes=1),
+    identifier: Optional[Callable[[Request], str]] = None,
+):
+    """Return a FastAPI dependency enforcing rate limit."""
+
+    def _dep(request: Request, redis_client: redis.Redis = Depends(get_redis)) -> None:
+        ident = identifier(request) if identifier else _client_ip(request)
+        key = f"rl:{ident}"
+        limiter = RateLimiter(
+            redis_client=redis_client,
+            max_attempts=max_attempts,
+            window_minutes=int(window.total_seconds() // 60) or 1,
+            key=key,
         )
+        if not limiter.is_allowed(key):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=(
+                    f"Rate limit exceeded. "
+                    f"{limiter.attempts(key)}/{max_attempts} attempts. "
+                    "Try again later."
+                ),
+            )
+
+    return _dep
+
+
+def check_rate_limit(request, redis_client, max_attempts, window_minutes, *, key: str):
+    """
+    Convenience wrapper used by routers.
+    Example:
+        check_rate_limit(request, redis_client, 5, 1, key=f"login:{email}")
+    """
+    RateLimiter(redis_client, max_attempts, window_minutes, key).check_or_raise()

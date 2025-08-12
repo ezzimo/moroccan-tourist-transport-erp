@@ -1,7 +1,7 @@
 """
 Authentication routes for login, logout, and OTP operations
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Body
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import Session
 from database import get_session, get_redis
@@ -26,23 +26,29 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 security = HTTPBearer()
 
 
+# Dependency to rate limit login attempts
+async def login_rate_limit(
+    request: Request,
+    login_data: LoginRequest = Body(...),
+    redis_client: redis.Redis = Depends(get_redis),
+) -> None:
+    check_rate_limit(
+        request,
+        redis_client,
+        5,  # max_attempts
+        1,  # window_minutes
+        key=f"login:{login_data.email.lower()}",
+    )
+
+
 @router.post("/login", response_model=LoginResponse)
 async def login(
     request: Request,
     login_data: LoginRequest,
     session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis)
+    redis_client: redis.Redis = Depends(get_redis),
+    _: None = Depends(login_rate_limit),
 ):
-    """Authenticate user and return JWT token"""
-    # Rate limiting for login attempts
-    check_rate_limit(
-        request, 
-        redis_client, 
-        max_attempts=5, 
-        window_minutes=1,
-        identifier_func=lambda req: f"login:{login_data.email}"
-    )
-    
     auth_service = AuthService(session, redis_client)
     return await auth_service.login(login_data)
 
@@ -68,11 +74,11 @@ async def send_otp(
     check_rate_limit(
         request,
         redis_client,
-        max_attempts=3,
-        window_minutes=1,
-        identifier_func=lambda req: f"otp:{otp_data.email}"
+        3,  # max_attempts
+        1,  # window_minutes
+        key=f"otp:{otp_data.email.lower()}",
     )
-    
+
     otp_service = OTPService(redis_client)
     return await otp_service.send_otp(otp_data.email)
 
@@ -85,7 +91,7 @@ async def verify_otp(
     """Verify OTP code"""
     otp_service = OTPService(redis_client)
     success = await otp_service.verify_otp(otp_data.email, otp_data.otp_code)
-    
+
     if success:
         return {"message": "OTP verified successfully"}
     else:
@@ -119,7 +125,10 @@ async def get_current_user_info(
             "id": role.id,
             "name": role.name,
             # Provide a human‑readable display_name; fallback to name
-            "display_name": getattr(role, "display_name", role.name),
+            "display_name": getattr(
+                role, "display_name",
+                role.name,
+            ),
             "description": role.description,
         }
         role_objects.append(RoleResponse.model_validate(role_dict))
@@ -143,7 +152,7 @@ async def get_user_permissions(
     """Get current user's permissions and roles"""
     permissions = current_user.get_all_permissions()
     roles = [role.name for role in current_user.roles]
-    
+
     return PermissionsResponse(
         permissions=permissions,
         roles=roles
