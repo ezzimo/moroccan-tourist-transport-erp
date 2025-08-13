@@ -2,7 +2,7 @@ from fastapi import HTTPException, Request, status, Depends
 from datetime import timedelta
 import redis
 from typing import Optional, Callable
-from database import get_redis
+from database_async import get_async_redis
 
 TRUSTED_PROXY_HOPS = 1
 
@@ -26,18 +26,18 @@ class RateLimiter:
         self.window = int(window_minutes) * 60
         self.key = key
 
-    def check_or_raise(self) -> None:
+    async def check_or_raise(self) -> None:
         try:
-            pipe = self.redis.pipeline()
-            pipe.incr(self.key)
-            pipe.ttl(self.key)
-            count, ttl = pipe.execute()
+            async with self.redis.pipeline() as pipe:
+                await pipe.incr(self.key)
+                await pipe.ttl(self.key)
+                count, ttl = await pipe.execute()
 
             if ttl == -1:
-                self.redis.expire(self.key, self.window)
+                await self.redis.expire(self.key, self.window)
                 ttl = self.window
             if count == 1:
-                self.redis.expire(self.key, self.window)
+                await self.redis.expire(self.key, self.window)
                 ttl = self.window
 
             if count > self.max_attempts:
@@ -53,14 +53,14 @@ class RateLimiter:
 
 
 # Generic callsite helper (kept for compatibility)
-def check_rate_limit(request, redis_client, max_attempts, window_minutes, *, key: str):
-    RateLimiter(redis_client, max_attempts, window_minutes, key).check_or_raise()
+async def check_rate_limit(request, redis_client, max_attempts, window_minutes, *, key: str):
+    await RateLimiter(redis_client, max_attempts, window_minutes, key).check_or_raise()
 
 
 # ------------- Centralized dependencies (no Body params) -------------
 async def login_rate_limit(
     request: Request,
-    redis_client: redis.Redis = Depends(get_redis),
+    redis_client: redis.Redis = Depends(get_async_redis),
 ) -> None:
     try:
         payload = await request.json()
@@ -68,12 +68,12 @@ async def login_rate_limit(
         payload = {}
     email = str(payload.get("email", "")).lower()
     key = f"login:{email}" if email else f"login-ip:{_client_ip(request)}"
-    RateLimiter(redis_client, 5, 1, key).check_or_raise()
+    await RateLimiter(redis_client, 5, 1, key).check_or_raise()
 
 
 async def otp_rate_limit(
     request: Request,
-    redis_client: redis.Redis = Depends(get_redis),
+    redis_client: redis.Redis = Depends(get_async_redis),
 ) -> None:
     try:
         payload = await request.json()
@@ -81,4 +81,4 @@ async def otp_rate_limit(
         payload = {}
     email = str(payload.get("email", "")).lower()
     key = f"otp:{email}" if email else f"otp-ip:{_client_ip(request)}"
-    RateLimiter(redis_client, 3, 1, key).check_or_raise()
+    await RateLimiter(redis_client, 3, 1, key).check_or_raise()

@@ -2,11 +2,10 @@
 Async User service
 """
 
-from sqlmodel import Session, select, and_, or_, func
+from sqlmodel import select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
-from fastapi.concurrency import run_in_threadpool
 from models.user import User, UserRole
 from models.role import Role
 from models.activity_log import ActivityLog, ActivityActions, ActivityResources
@@ -46,27 +45,15 @@ class UserSearchFilters:
 class UserService:
     """Service for handling user operations"""
 
-    def __init__(self, session: Session):
+    def __init__(self, session: AsyncSession):
         self.session = session
-
-    # --- small helpers to keep DB work off the event loop ---
-    async def _exec(self, stmt):
-        return await run_in_threadpool(self.session.exec, stmt)
-
-    async def _add(self, obj):
-        return await run_in_threadpool(self.session.add, obj)
-
-    async def _commit(self):
-        return await run_in_threadpool(self.session.commit)
-
-    async def _refresh(self, obj):
-        return await run_in_threadpool(self.session.refresh, obj)
 
     async def create_user(
         self, user_data: UserCreate, actor_id: Optional[uuid.UUID] = None
     ) -> UserResponse:
         stmt = select(User).where(User.email == user_data.email)
-        existing = (await self._exec(stmt)).first()
+        result = await self.session.execute(stmt)
+        existing = result.scalar_one_or_none()
         if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -82,14 +69,15 @@ class UserService:
             must_change_password=getattr(user_data, "must_change_password", False),
             avatar_url=getattr(user_data, "avatar_url", None),
         )
-        await self._add(user)
-        await self._commit()
-        await self._refresh(user)
+        self.session.add(user)
+        await self.session.commit()
+        await self.session.refresh(user)
         return UserResponse.model_validate(user)
 
     async def get_user(self, user_id: uuid.UUID) -> UserWithRoles:
         stmt = select(User).where(User.id == user_id)
-        user = (await self._exec(stmt)).first()
+        result = await self.session.execute(stmt)
+        user = result.scalar_one_or_none()
         if not user:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         return UserWithRoles.model_validate(user)
@@ -103,7 +91,8 @@ class UserService:
             .offset(skip)
             .limit(limit)
         )
-        users = (await self._exec(stmt)).all()
+        result = await self.session.execute(stmt)
+        users = result.scalars().all()
         return [UserResponse.model_validate(u) for u in users]
 
     async def search_users(
@@ -158,7 +147,8 @@ class UserService:
                 UserRole.role_id.in_(filters.role_ids)
             )
 
-        total = (await self.session.exec(count_query)).scalar_one()
+        total_result = await self.session.execute(count_query)
+        total = total_result.scalar_one()
 
         if hasattr(User, sort_by):
             col = getattr(User, sort_by)
@@ -167,7 +157,8 @@ class UserService:
             )
 
         query = query.offset(skip).limit(limit)
-        users = (await self.session.exec(query)).all()
+        users_result = await self.session.execute(query)
+        users = users_result.scalars().all()
 
         return {
             "users": [UserWithRoles.model_validate(u) for u in users],
@@ -183,8 +174,8 @@ class UserService:
         user_data: UserUpdate,
         actor_id: Optional[uuid.UUID] = None,
     ) -> UserResponse:
-        res = await self.session.exec(select(User).where(User.id == user_id))
-        user = res.first()
+        result = await self.session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
@@ -239,8 +230,8 @@ class UserService:
         actor_id: Optional[uuid.UUID] = None,
         hard_delete: bool = False,
     ) -> dict:
-        res = await self.session.exec(select(User).where(User.id == user_id))
-        user = res.first()
+        result = await self.session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
@@ -296,8 +287,8 @@ class UserService:
     async def lock_user_account(
         self, user_id: uuid.UUID, actor_id: Optional[uuid.UUID] = None
     ) -> dict:
-        res = await self.session.exec(select(User).where(User.id == user_id))
-        user = res.first()
+        result = await self.session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
@@ -319,8 +310,8 @@ class UserService:
     async def unlock_user_account(
         self, user_id: uuid.UUID, actor_id: Optional[uuid.UUID] = None
     ) -> dict:
-        res = await self.session.exec(select(User).where(User.id == user_id))
-        user = res.first()
+        result = await self.session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
@@ -345,8 +336,8 @@ class UserService:
         actor_id: Optional[uuid.UUID] = None,
         new_password: Optional[str] = None,
     ) -> dict:
-        res = await self.session.exec(select(User).where(User.id == user_id))
-        user = res.first()
+        result = await self.session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
@@ -382,8 +373,8 @@ class UserService:
         status_updates: dict[str, object],
         actor_id: Optional[uuid.UUID] = None,
     ) -> dict:
-        res = await self.session.exec(select(User).where(User.id.in_(user_ids)))
-        users = res.all()
+        result = await self.session.execute(select(User).where(User.id.in_(user_ids)))
+        users = result.scalars().all()
         if not users:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="No users found"
@@ -437,7 +428,8 @@ class UserService:
             .order_by(ActivityLog.created_at.desc())
             .limit(limit)
         )
-        activities = (await self.session.exec(stmt)).all()
+        result = await self.session.execute(stmt)
+        activities = result.scalars().all()
         return [
             {
                 "id": str(a.id),
@@ -454,16 +446,16 @@ class UserService:
         ]
 
     async def _assign_roles(self, user_id: uuid.UUID, role_ids: list[uuid.UUID]):
-        res = await self.session.exec(
+        result = await self.session.execute(
             select(UserRole).where(UserRole.user_id == user_id)
         )
-        existing_roles = res.all()
+        existing_roles = result.scalars().all()
         for r in existing_roles:
             await self.session.delete(r)
 
         for rid in role_ids:
-            check = await self.session.exec(select(Role).where(Role.id == rid))
-            if check.first():
+            check_result = await self.session.execute(select(Role).where(Role.id == rid))
+            if check_result.scalar_one_or_none():
                 self.session.add(UserRole(user_id=user_id, role_id=rid))
         await self.session.commit()
 
@@ -477,16 +469,14 @@ class UserService:
         ip_address: Optional[str] = None,
         user_agent: Optional[str] = None,
     ):
-        actor = (
-            await self.session.exec(select(User).where(User.id == actor_id))
-        ).first()
+        actor_result = await self.session.execute(select(User).where(User.id == actor_id))
+        actor = actor_result.scalar_one_or_none()
         actor_email = actor.email if actor else "unknown"
 
         target_user_email = None
         if target_user_id:
-            tu = (
-                await self.session.exec(select(User).where(User.id == target_user_id))
-            ).first()
+            tu_result = await self.session.execute(select(User).where(User.id == target_user_id))
+            tu = tu_result.scalar_one_or_none()
             target_user_email = tu.email if tu else None
 
         activity = ActivityLog.create_log(

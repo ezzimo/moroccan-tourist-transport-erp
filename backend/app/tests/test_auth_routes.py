@@ -3,22 +3,24 @@
 Integration tests for /auth routes using TestClient.
 These ensure request/response wiring, headers, and DI are correct.
 """
-import redis
-from fastapi.testclient import TestClient
-from sqlmodel import Session
+import pytest
+from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+from redis.asyncio import Redis
 
 
 def _auth_header(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_login_and_me_flow(
-    client: TestClient, session: Session, redis_client: redis.Redis, make_user
+@pytest.mark.asyncio
+async def test_login_and_me_flow(
+    client: AsyncClient, session: AsyncSession, redis_client: Redis, make_user
 ):
     """A normal login returns a token; /auth/me returns the user shape."""
-    make_user(email="api@example.com", password="MyPass123!!")
+    await make_user(email="api@example.com", password="MyPass123!!")
 
-    r = client.post(
+    r = await client.post(
         "/api/v1/auth/login",
         json={"email": "api@example.com", "password": "MyPass123!!"},
     )
@@ -28,7 +30,7 @@ def test_login_and_me_flow(
     assert data["token_type"] == "bearer"
 
     # /auth/me
-    r2 = client.get("/api/v1/auth/me", headers=_auth_header(token))
+    r2 = await client.get("/api/v1/auth/me", headers=_auth_header(token))
     assert r2.status_code == 200
     me = r2.json()
     assert me["email"] == "api@example.com"
@@ -36,34 +38,33 @@ def test_login_and_me_flow(
     assert isinstance(me["permissions"], list)
 
 
-def test_login_rate_limited(client: TestClient):
+@pytest.mark.asyncio
+async def test_login_rate_limited(client: AsyncClient):
     """Exceeding login attempts triggers 429 via the login_rate_limit dep."""
     payload = {"email": "ratelimit@example.com", "password": "anything"}
     # First few attempts allowed
     for _ in range(5):
-        client.post("/api/v1/auth/login", json=payload)
+        await client.post("/api/v1/auth/login", json=payload)
     # Next attempt should be blocked
-    r = client.post("/api/v1/auth/login", json=payload)
+    r = await client.post("/api/v1/auth/login", json=payload)
     assert r.status_code == 429
     assert "Rate limit exceeded" in r.json()["detail"]
 
 
-def test_logout_revokes_token(client: TestClient, make_user):
+@pytest.mark.asyncio
+async def test_logout_revokes_token(client: AsyncClient, make_user, auth_header):
     """
     Logout blacklists the token;
     subsequent /auth/me with same token is rejected.
     """
-    make_user(email="logout2@example.com", password="TempPass123!!")
+    await make_user(email="logout2@example.com", password="TempPass123!!")
 
-    r = client.post(
-        "/api/v1/auth/login",
-        json={"email": "logout2@example.com", "password": "TempPass123!!"},
-    )
-    token = r.json()["access_token"]
+    headers = await auth_header("logout2@example.com", "TempPass123!!")
+    token = headers["Authorization"].split(" ")[1]
 
-    r2 = client.post("/api/v1/auth/logout", headers=_auth_header(token))
+    r2 = await client.post("/api/v1/auth/logout", headers=headers)
     assert r2.status_code == 200
 
     # Using the same token should now fail on protected endpoints
-    r3 = client.get("/api/v1/auth/me", headers=_auth_header(token))
+    r3 = await client.get("/api/v1/auth/me", headers=_auth_header(token))
     assert r3.status_code == 401

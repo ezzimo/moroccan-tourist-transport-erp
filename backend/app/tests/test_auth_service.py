@@ -6,26 +6,26 @@ and fakeredis from fixtures) and are fast & deterministic.
 """
 
 import pytest
-import redis
 from config import settings
 from models.user import User
 from schemas.auth import LoginRequest
 from services.auth_service import AuthService
-from sqlmodel import Session
-from utils.security import is_token_blacklisted
+from sqlalchemy.ext.asyncio import AsyncSession
+from redis.asyncio import Redis
+from utils.security import is_token_blacklisted_async
 from utils.security import verify_token as decode_jwt
 
 
 class TestAuthService:
     @pytest.mark.asyncio
     async def test_login_success(
-        self, session: Session, redis_client: redis.Redis, make_user
+        self, session: AsyncSession, redis_client: Redis, make_user
     ):
         """
         User with correct credentials receives a valid JWT
         and last_login(_at) is set.
         """
-        user: User = make_user(email="ok@example.com", password="Secret123!")
+        user: User = await make_user(email="ok@example.com", password="Secret123!")
 
         svc = AuthService(session, redis_client)
         resp = await svc.login(
@@ -42,15 +42,15 @@ class TestAuthService:
         assert token_data.user_id == user.id
 
         # last_login is set by the service; last_login_at may also be used.
-        session.refresh(user)
+        await session.refresh(user)
         assert user.last_login_at is not None
 
     @pytest.mark.asyncio
     async def test_login_wrong_password(
-        self, session: Session, redis_client: redis.Redis, make_user
+        self, session: AsyncSession, redis_client: Redis, make_user
     ):
         """Wrong password returns 401."""
-        make_user(email="fail@example.com", password="RightPass1!")
+        await make_user(email="fail@example.com", password="RightPass1!")
         svc = AuthService(session, redis_client)
 
         with pytest.raises(Exception) as exc:
@@ -61,10 +61,10 @@ class TestAuthService:
 
     @pytest.mark.asyncio
     async def test_login_disabled_user(
-        self, session: Session, redis_client: redis.Redis, make_user
+        self, session: AsyncSession, redis_client: Redis, make_user
     ):
         """Disabled users cannot log in."""
-        make_user(
+        await make_user(
             email="disabled@example.com",
             password="Pw12345!!",
             is_active=False,
@@ -81,10 +81,10 @@ class TestAuthService:
 
     @pytest.mark.asyncio
     async def test_logout_blacklists_token(
-        self, session: Session, redis_client: redis.Redis, make_user
+        self, session: AsyncSession, redis_client: Redis, make_user
     ):
         """Logout stores the JTI in Redis; subsequent use should be denied."""
-        make_user(email="logout@example.com", password="PW!2345678")
+        await make_user(email="logout@example.com", password="PW!2345678")
         svc = AuthService(session, redis_client)
 
         login_resp = await svc.login(
@@ -95,7 +95,7 @@ class TestAuthService:
         assert out["message"] == "Successfully logged out"
 
         assert (
-            is_token_blacklisted(
+            await is_token_blacklisted_async(
                 login_resp.access_token,
                 redis_client,
             )
@@ -104,10 +104,10 @@ class TestAuthService:
 
     @pytest.mark.asyncio
     async def test_verify_token_valid(
-        self, session: Session, redis_client: redis.Redis, make_user
+        self, session: AsyncSession, redis_client: Redis, make_user
     ):
         """Verify a valid token returns the user."""
-        user = make_user(email="verify@example.com", password="PwOk!!22")
+        user = await make_user(email="verify@example.com", password="PwOk!!22")
         svc = AuthService(session, redis_client)
         login_resp = await svc.login(
             LoginRequest(email="verify@example.com", password="PwOk!!22")
@@ -118,10 +118,10 @@ class TestAuthService:
 
     @pytest.mark.asyncio
     async def test_verify_token_revoked(
-        self, session: Session, redis_client: redis.Redis, make_user
+        self, session: AsyncSession, redis_client: Redis, make_user
     ):
         """Revoked token is rejected."""
-        make_user(email="revoked@example.com", password="PwOk!!22")
+        await make_user(email="revoked@example.com", password="PwOk!!22")
         svc = AuthService(session, redis_client)
         login_resp = await svc.login(
             LoginRequest(email="revoked@example.com", password="PwOk!!22")
@@ -135,8 +135,8 @@ class TestAuthService:
     @pytest.mark.asyncio
     async def test_verify_token_invalid(
         self,
-        session: Session,
-        redis_client: redis.Redis,
+        session: AsyncSession,
+        redis_client: Redis,
     ):
         """Garbage tokens are rejected."""
         svc = AuthService(session, redis_client)

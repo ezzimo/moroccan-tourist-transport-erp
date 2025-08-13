@@ -1,72 +1,45 @@
 # utils/redis_compat.py
 from __future__ import annotations
 from typing import Any, Tuple
-from utils.compat import maybe_await, get_method
-import inspect
+from redis.asyncio import Redis
 
 
-async def r_get(client: Any, key: str) -> Any:
-    return await maybe_await(get_method(client, "get")(key))
+async def r_get(client: Redis, key: str) -> Any:
+    return await client.get(key)
 
 
-async def r_setex(client, key: str, ttl_seconds: int, value: str) -> None:
-    res = client.setex(key, ttl_seconds, value)
-    if inspect.isawaitable(res):
-        await res
+async def r_setex(client: Redis, key: str, ttl_seconds: int, value: str) -> None:
+    await client.setex(key, ttl_seconds, value)
 
 
-async def r_incr(client: Any, key: str) -> int:
-    return int(await maybe_await(get_method(client, "incr")(key)))
+async def r_incr(client: Redis, key: str) -> int:
+    return await client.incr(key)
 
 
-async def r_ttl(client: Any, key: str) -> int:
-    return int(await maybe_await(get_method(client, "ttl")(key)))
+async def r_ttl(client: Redis, key: str) -> int:
+    return await client.ttl(key)
 
 
-async def r_expire(client: Any, key: str, ttl_seconds: int) -> Any:
-    return await maybe_await(get_method(client, "expire")(key, ttl_seconds))
+async def r_expire(client: Redis, key: str, ttl_seconds: int) -> Any:
+    return await client.expire(key, ttl_seconds)
 
 
-async def r_exists(client, key: str) -> bool:
-    res = client.exists(key)
-    if inspect.isawaitable(res):
-        return bool(await res)
-    return bool(res)
+async def r_exists(client: Redis, key: str) -> bool:
+    return await client.exists(key)
 
 
-async def r_del(client: Any, key: str) -> Any:
-    return await maybe_await(get_method(client, "delete")(key))
+async def r_del(client: Redis, key: str) -> Any:
+    return await client.delete(key)
 
 
-async def r_pipeline_incr_ttl(client: Any, key: str) -> Tuple[int, int]:
+async def r_pipeline_incr_ttl(client: Redis, key: str) -> Tuple[int, int]:
     """
     Portable 'pipeline': try real pipeline if available,
     otherwise do two calls.
     Returns (count, ttl)
     """
-    pipe_attr = getattr(client, "pipeline", None)
-    if pipe_attr is None:
-        # fallback: not truly atomic but good enough for tests
-        count = await r_incr(client, key)
-        ttl = await r_ttl(client, key)
-        return count, ttl
-
-    pipe = pipe_attr()
-    enter = getattr(pipe, "__aenter__", None)
-    exit_ = getattr(pipe, "__aexit__", None)
-
-    if callable(enter) and callable(exit_):
-        # async pipeline
-        async with pipe:
-            await maybe_await(get_method(pipe, "incr")(key))
-            await maybe_await(get_method(pipe, "ttl")(key))
-            res = await maybe_await(get_method(pipe, "execute")())
-        count, ttl = res
-        return int(count), int(ttl)
-
-    # sync pipeline
-    pipe.incr(key)
-    pipe.ttl(key)
-    res = pipe.execute()
-    count, ttl = res
+    async with client.pipeline() as pipe:
+        await pipe.incr(key)
+        await pipe.ttl(key)
+        count, ttl = await pipe.execute()
     return int(count), int(ttl)

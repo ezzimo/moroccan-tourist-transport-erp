@@ -4,7 +4,7 @@ OTP service with sync/async Redis compatibility
 
 from __future__ import annotations
 import random, string, json
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from config import settings
 from typing import Any
@@ -35,7 +35,7 @@ class OTPService:
             "code": code,
             "email": email,
             "purpose": purpose,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "attempts": 0,
         }
         await r_setex(
@@ -59,6 +59,13 @@ class OTPService:
             )
 
         otp = json.loads(data)
+        created_at = datetime.fromisoformat(otp["created_at"])
+        if (datetime.now(timezone.utc) - created_at).total_seconds() > (settings.otp_expire_minutes * 60):
+            await r_del(self.redis, otp_key)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="OTP has expired",
+            )
         attempts = int(otp.get("attempts", 0)) + 1
         otp["attempts"] = attempts
 
