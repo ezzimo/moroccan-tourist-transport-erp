@@ -4,15 +4,15 @@ set -e  # Exit immediately on error
 echo "[entrypoint] Starting authentication service..."
 
 # Wait for the database to be ready
-echo "[entrypoint] Waiting for database at $DATABASE_URL..."
+echo "[entrypoint] Waiting for database at $DATABASE_URL_SYNC..."
 python <<'PY'
 import os, time, sys
 from urllib.parse import urlparse
 import psycopg2
 
-url = os.environ.get("DATABASE_URL")
+url = os.environ.get("DATABASE_URL_SYNC")
 if not url:
-    print("DATABASE_URL environment variable is not set", file=sys.stderr)
+    print("DATABASE_URL_SYNC environment variable is not set", file=sys.stderr)
     sys.exit(1)
 
 p = urlparse(url)
