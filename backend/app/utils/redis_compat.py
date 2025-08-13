@@ -2,20 +2,17 @@
 from __future__ import annotations
 from typing import Any, Tuple
 from utils.compat import maybe_await, get_method
+import inspect
 
 
 async def r_get(client: Any, key: str) -> Any:
     return await maybe_await(get_method(client, "get")(key))
 
 
-async def r_setex(client: Any, key: str, ttl_seconds: int, value: str) -> Any:
-    return await maybe_await(
-        get_method(client, "setex")(
-            key,
-            ttl_seconds,
-            value,
-        )
-    )
+async def r_setex(client, key: str, ttl_seconds: int, value: str) -> None:
+    res = client.setex(key, ttl_seconds, value)
+    if inspect.isawaitable(res):
+        await res
 
 
 async def r_incr(client: Any, key: str) -> int:
@@ -30,10 +27,11 @@ async def r_expire(client: Any, key: str, ttl_seconds: int) -> Any:
     return await maybe_await(get_method(client, "expire")(key, ttl_seconds))
 
 
-async def r_exists(client: Any, key: str) -> bool:
-    val = await maybe_await(get_method(client, "exists")(key))
-    # redis-py returns int; fakeredis may return bool
-    return bool(val)
+async def r_exists(client, key: str) -> bool:
+    res = client.exists(key)
+    if inspect.isawaitable(res):
+        return bool(await res)
+    return bool(res)
 
 
 async def r_del(client: Any, key: str) -> Any:

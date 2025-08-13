@@ -2,10 +2,11 @@
 Async User service
 """
 
-from sqlmodel import select, and_, or_, func
+from sqlmodel import Session, select, and_, or_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from fastapi import HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from models.user import User, UserRole
 from models.role import Role
 from models.activity_log import ActivityLog, ActivityActions, ActivityResources
@@ -43,16 +44,30 @@ class UserSearchFilters:
 
 
 class UserService:
-    def __init__(self, session: AsyncSession):
+    """Service for handling user operations"""
+
+    def __init__(self, session: Session):
         self.session = session
+
+    # --- small helpers to keep DB work off the event loop ---
+    async def _exec(self, stmt):
+        return await run_in_threadpool(self.session.exec, stmt)
+
+    async def _add(self, obj):
+        return await run_in_threadpool(self.session.add, obj)
+
+    async def _commit(self):
+        return await run_in_threadpool(self.session.commit)
+
+    async def _refresh(self, obj):
+        return await run_in_threadpool(self.session.refresh, obj)
 
     async def create_user(
         self, user_data: UserCreate, actor_id: Optional[uuid.UUID] = None
     ) -> UserResponse:
-        existing = await self.session.exec(
-            select(User).where(User.email == user_data.email)
-        )
-        if existing.first():
+        stmt = select(User).where(User.email == user_data.email)
+        existing = (await self._exec(stmt)).first()
+        if existing:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Email already registered",
@@ -67,36 +82,28 @@ class UserService:
             must_change_password=getattr(user_data, "must_change_password", False),
             avatar_url=getattr(user_data, "avatar_url", None),
         )
-        self.session.add(user)
-        await self.session.commit()
-        await self.session.refresh(user)
-
-        if user_data.role_ids:
-            await self._assign_roles(user.id, user_data.role_ids)
-
-        if actor_id:
-            await self._log_activity(
-                actor_id=actor_id,
-                action=ActivityActions.USER_CREATED,
-                target_user_id=user.id,
-                description=f"Created user account for {user.email}",
-                metadata={"role_ids": [str(rid) for rid in (user_data.role_ids or [])]},
-            )
-
+        await self._add(user)
+        await self._commit()
+        await self._refresh(user)
         return UserResponse.model_validate(user)
 
     async def get_user(self, user_id: uuid.UUID) -> UserWithRoles:
-        res = await self.session.exec(select(User).where(User.id == user_id))
-        user = res.first()
+        stmt = select(User).where(User.id == user_id)
+        user = (await self._exec(stmt)).first()
         if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
         return UserWithRoles.model_validate(user)
 
-    async def get_users(self, skip: int = 0, limit: int = 100) -> list[UserResponse]:
-        stmt = select(User).where(User.deleted_at.is_(None)).offset(skip).limit(limit)
-        users = (await self.session.exec(stmt)).all()
+    async def get_users(
+        self, skip: int = 0, limit: int = 100
+    ) -> list[UserResponse]:
+        stmt = (
+            select(User)
+            .where(User.deleted_at.is_(None))
+            .offset(skip)
+            .limit(limit)
+        )
+        users = (await self._exec(stmt)).all()
         return [UserResponse.model_validate(u) for u in users]
 
     async def search_users(

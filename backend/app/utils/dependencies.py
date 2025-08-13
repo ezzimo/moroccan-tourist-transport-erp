@@ -2,12 +2,12 @@ from fastapi import Depends, HTTPException, status, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from redis.asyncio import Redis
 from database_async import get_async_session, get_async_redis
 from models.user import User
-from utils.security import verify_token, is_token_blacklisted
+from utils.security import verify_token, is_token_blacklisted_async
 from utils.redis_compat import r_exists
 from schemas.auth import TokenData
-from redis.asyncio import Redis
 import logging
 
 logger = logging.getLogger(__name__)
@@ -28,32 +28,19 @@ async def get_current_user(
     token = credentials.credentials
 
     try:
-        # ✅ await the async helper
-        if await is_token_blacklisted(token, redis_client):
+        if await is_token_blacklisted_async(token, redis_client):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has been revoked",
-                headers={
-                    "WWW-Authenticate": "Bearer"
-                },
+                headers={"WWW-Authenticate": "Bearer"},
             )
-
-        # ---- raw-token fallback using compat exists (async/sync safe) ----
+        # raw-token fallback
         if await r_exists(redis_client, f"blacklist:raw:{token}"):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has been revoked",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        # Optional safety: raw token key
-        if await redis_client.exists(f"blacklist:raw:{token}"):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token has been revoked",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-    except HTTPException:
-        raise
     except Exception as e:
         logger.debug("Blacklist check failed: %s", e)
         raise HTTPException(
