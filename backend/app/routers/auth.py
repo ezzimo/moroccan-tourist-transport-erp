@@ -3,8 +3,8 @@ Authentication routes for login, logout, and OTP operations
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Body
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlmodel import Session
-from database import get_session, get_redis
+from sqlalchemy.ext.asyncio import AsyncSession
+from database_async import get_async_session, get_async_redis
 from services.auth_service import AuthService
 from services.otp_service import OTPService
 from schemas.auth import (
@@ -19,7 +19,7 @@ from schemas.user import RoleResponse, UserResponse
 from utils.dependencies import get_current_active_user
 from utils.rate_limiter import login_rate_limit, otp_rate_limit
 from models.user import User
-import redis
+from redis.asyncio import Redis
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 security = HTTPBearer()
@@ -29,8 +29,8 @@ security = HTTPBearer()
 async def login(
     request: Request,
     login_data: LoginRequest,
-    session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis),
+    session: AsyncSession = Depends(get_async_session),
+    redis_client: Redis = Depends(get_async_redis),
     _: None = Depends(login_rate_limit),
 ):
     auth_service = AuthService(session, redis_client)
@@ -40,7 +40,7 @@ async def login(
 @router.post("/logout")
 async def logout(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    redis_client: redis.Redis = Depends(get_redis),
+    redis_client: Redis = Depends(get_async_redis),
 ):
     """Logout user by blacklisting token"""
     auth_service = AuthService(None, redis_client)
@@ -51,7 +51,7 @@ async def logout(
 async def send_otp(
     request: Request,
     otp_data: OTPRequest,
-    redis_client: redis.Redis = Depends(get_redis),
+    redis_client: Redis = Depends(get_async_redis),
     _: None = Depends(otp_rate_limit),
 ):
     """Send OTP to user's email/phone"""
@@ -62,7 +62,7 @@ async def send_otp(
 @router.post("/verify-otp")
 async def verify_otp(
     otp_data: OTPVerifyRequest,
-    redis_client: redis.Redis = Depends(get_redis),
+    redis_client: Redis = Depends(get_async_redis),
 ):
     """Verify OTP code"""
     otp_service = OTPService(redis_client)

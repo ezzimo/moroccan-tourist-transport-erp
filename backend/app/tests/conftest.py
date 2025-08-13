@@ -1,65 +1,61 @@
 """
 Test configuration and fixtures
 """
-from models.permission import Permission
-from models.role import Role, RolePermission
+import pytest_asyncio
 from fastapi.testclient import TestClient
-from sqlmodel import Session, select
+from sqlmodel import select
 import pytest
-import fakeredis
-import os
+import httpx
 from main import app
-from database import get_session, get_redis
-from test_database import create_test_db_and_tables, test_engine
+from database_async import get_async_session, get_async_redis
+from test_database import create_test_db_and_tables, get_test_async_session, get_test_redis
 from utils.security import get_password_hash
 from models.user import User, UserRole
+from models.role import Role, RolePermission
+from models.permission import Permission
+from sqlalchemy.ext.asyncio import AsyncSession
+from redis.asyncio import Redis
 
 
-# Test database engine
-@pytest.fixture(name="session")
-def session_fixture():
+@pytest_asyncio.fixture(name="session")
+async def session_fixture() -> AsyncSession:
     """Create test database session"""
-    # Create tables
-    create_test_db_and_tables()
-
-    with Session(test_engine) as session:
+    await create_test_db_and_tables()
+    async for session in get_test_async_session():
         yield session
 
-    # Clean up
-    if os.path.exists("test_auth.db"):
-        os.unlink("test_auth.db")
 
-
-@pytest.fixture(name="redis_client")
-def redis_client_fixture():
+@pytest_asyncio.fixture(name="redis_client")
+async def redis_client_fixture() -> Redis:
     """Create fake Redis client for testing"""
-    return fakeredis.FakeRedis(decode_responses=True)
+    return get_test_redis()
 
 
-@pytest.fixture(name="client")
-def client_fixture(session: Session, redis_client):
+@pytest_asyncio.fixture(name="client")
+async def client_fixture(session: AsyncSession, redis_client: Redis):
     """Create test client with dependency overrides"""
-    def get_session_override():
-        return session
 
-    def get_redis_override():
-        return redis_client
+    async def get_session_override():
+        yield session
 
-    app.dependency_overrides[get_session] = get_session_override
-    app.dependency_overrides[get_redis] = get_redis_override
+    async def get_redis_override():
+        yield redis_client
 
-    with TestClient(app) as test_client:
-        yield test_client
+    app.dependency_overrides[get_async_session] = get_session_override
+    app.dependency_overrides[get_async_redis] = get_redis_override
+
+    async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        yield client
 
     app.dependency_overrides.clear()
 
 
-@pytest.fixture
-def make_user(session: Session):
+@pytest_asyncio.fixture
+async def make_user(session: AsyncSession):
     """
     Factory fixture to create a user with a hashed password.
     """
-    def _make_user(
+    async def _make_user(
         *,
         full_name="Test User",
         email="user@example.com",
@@ -79,19 +75,19 @@ def make_user(session: Session):
             is_locked=is_locked,
         )
         session.add(user)
-        session.commit()
-        session.refresh(user)
+        await session.commit()
+        await session.refresh(user)
         return user
     return _make_user
 
 
-@pytest.fixture
-def make_permission(session: Session):
+@pytest_asyncio.fixture
+async def make_permission(session: AsyncSession):
     """
     Create (or return existing) Permission(service_name, action, resource).
     Normalizes fields to lowercase.
     """
-    def _make_permission(
+    async def _make_permission(
             service_name: str,
             action: str,
             resource: str = "*",
@@ -105,100 +101,104 @@ def make_permission(session: Session):
             Permission.action == act,
             Permission.resource == res,
         )
-        perm = session.exec(stmt).first()
+        result = await session.execute(stmt)
+        perm = result.scalar_one_or_none()
         if perm:
             return perm
 
         perm = Permission(service_name=svc, action=act, resource=res)
         session.add(perm)
-        session.commit()
-        session.refresh(perm)
+        await session.commit()
+        await session.refresh(perm)
         return perm
     return _make_permission
 
 
-@pytest.fixture
-def make_role(session: Session):
+@pytest_asyncio.fixture
+async def make_role(session: AsyncSession):
     """
     Create a Role by name (unique). Returns existing if already present.
     """
-    def _make_role(name: str, description: str | None = None) -> Role:
+    async def _make_role(name: str, description: str | None = None) -> Role:
         stmt = select(Role).where(Role.name == name)
-        role = session.exec(stmt).first()
+        result = await session.execute(stmt)
+        role = result.scalar_one_or_none()
         if role:
             return role
 
         role = Role(name=name, description=description)
         session.add(role)
-        session.commit()
-        session.refresh(role)
+        await session.commit()
+        await session.refresh(role)
         return role
     return _make_role
 
 
-@pytest.fixture
-def grant_permission(session: Session):
+@pytest_asyncio.fixture
+async def grant_permission(session: AsyncSession):
     """
     Attach a permission to a role (idempotent).
     """
-    def _grant(role: Role, permission: Permission) -> None:
+    async def _grant(role: Role, permission: Permission) -> None:
         # Check if link exists
         stmt = select(RolePermission).where(
             RolePermission.role_id == role.id,
             RolePermission.permission_id == permission.id,
         )
-        rp = session.exec(stmt).first()
+        result = await session.execute(stmt)
+        rp = result.scalar_one_or_none()
         if not rp:
             session.add(RolePermission(
                 role_id=role.id,
                 permission_id=permission.id,
             ))
-            session.commit()
+            await session.commit()
     return _grant
 
 
-@pytest.fixture
-def assign_role(session: Session):
+@pytest_asyncio.fixture
+async def assign_role(session: AsyncSession):
     """
     Assign a role to a user (idempotent).
     """
-    def _assign(user: User, role: Role) -> None:
+    async def _assign(user: User, role: Role) -> None:
         # Check if link exists
         stmt = select(UserRole).where(
             UserRole.user_id == user.id,
             UserRole.role_id == role.id,
         )
-        ur = session.exec(stmt).first()
+        result = await session.execute(stmt)
+        ur = result.scalar_one_or_none()
         if not ur:
             session.add(UserRole(user_id=user.id, role_id=role.id))
-            session.commit()
+            await session.commit()
     return _assign
 
 
-@pytest.fixture
-def role_with_perms(make_role, make_permission, grant_permission):
+@pytest_asyncio.fixture
+async def role_with_perms(make_role, make_permission, grant_permission):
     """
     Create a role and attach the provided list of
     (service, action, resource) tuples.
     Returns the role.
     """
-    def _make(name: str, perms: list[tuple[str, str, str]]):
-        role = make_role(name)
+    async def _make(name: str, perms: list[tuple[str, str, str]]):
+        role = await make_role(name)
         for svc, act, res in perms:
-            perm = make_permission(svc, act, res)
-            grant_permission(role, perm)
+            perm = await make_permission(svc, act, res)
+            await grant_permission(role, perm)
         return role
     return _make
 
 
-@pytest.fixture
-def auth_header(client):
+@pytest_asyncio.fixture
+async def auth_header(client: httpx.AsyncClient):
     """
     Helper to log a user in and return Authorization header dict.
-    Usage: headers = auth_header("email@example.com", "Password123!")
+    Usage: headers = await auth_header("email@example.com", "Password123!")
     """
-    def _header(email: str, password: str) -> dict[str, str]:
-        r = client.post(
+    async def _header(email: str, password: str) -> dict[str, str]:
+        r = await client.post(
             "/api/v1/auth/login",
             json={
                 "email": email,
@@ -206,7 +206,8 @@ def auth_header(client):
             },
         )
         assert r.status_code == 200, r.text
-        token = r.json()["access_token"]
+        token = r.json().get("access_token")
+        assert token is not None
         return {"Authorization": f"Bearer {token}"}
     return _header
 

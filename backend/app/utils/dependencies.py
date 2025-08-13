@@ -7,13 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from redis.asyncio import Redis
 import logging
+from sqlalchemy.orm import selectinload
 
-from utils.db import get_async_session
-from utils.redis_client import get_async_redis  # keep your actual provider path
-from utils.security import verify_token, is_token_blacklisted_async  # async blacklist helper
-from utils.redis_compat import r_exists  # compat layer (awaitable)
+from database_async import get_async_session, get_async_redis
+from utils.security import verify_token, is_token_blacklisted_async
+from utils.redis_compat import r_exists
 from schemas.auth import TokenData
 from models.user import User
+from models.role import Role
 
 logger = logging.getLogger(__name__)
 
@@ -69,9 +70,9 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Fetch user via AsyncSession (this replaces the old .exec(...))
+    # Fetch user via AsyncSession and eager load roles and permissions
     result = await session.execute(
-        select(User).where(User.id == token_data.user_id)
+        select(User).options(selectinload(User.roles).selectinload(Role.permissions)).where(User.id == token_data.user_id)
     )
     user = result.scalar_one_or_none()
     if user is None:
@@ -102,11 +103,8 @@ async def get_current_active_user(
 def require_permission(service: str, action: str, resource: str):
     async def _dep(
         user: User = Depends(get_current_active_user),
-        session: AsyncSession = Depends(get_async_session),
     ) -> None:
-        result = await session.execute(select(User).where(User.id == user.id))
-        db_user = result.scalar_one_or_none()
-        if not db_user or not db_user.has_permission(service, action, resource):
+        if not user.has_permission(service, action, resource):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions",

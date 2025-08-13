@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 import logging
 import redis
 from fastapi import HTTPException, status
-from fastapi.concurrency import run_in_threadpool
-from sqlmodel import Session, select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from models.user import User
 from schemas.auth import LoginRequest, LoginResponse
@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 class AuthService:
     """Service for handling authentication operations"""
 
-    def __init__(self, session: Session | None, redis_client: redis.Redis):
+    def __init__(self, session: AsyncSession | None, redis_client: redis.Redis):
         self.session = session
         self.redis = redis_client
 
@@ -37,8 +37,8 @@ class AuthService:
         logger.info("Login attempt for email=%s", login_data.email)
 
         stmt = select(User).where(User.email == login_data.email)
-        result = await run_in_threadpool(self.session.exec, stmt)
-        user = result.first()
+        result = await self.session.execute(stmt)
+        user = result.scalar_one_or_none()
 
         if not user or not verify_password(login_data.password, user.password_hash):
             raise HTTPException(
@@ -52,9 +52,9 @@ class AuthService:
             )
 
         user.last_login_at = datetime.utcnow()
-        await run_in_threadpool(self.session.add, user)
-        await run_in_threadpool(self.session.commit)
-        await run_in_threadpool(self.session.refresh, user)
+        self.session.add(user)
+        await self.session.commit()
+        await self.session.refresh(user)
 
         expires = timedelta(minutes=settings.access_token_expire_minutes)
         access_token = create_access_token(
@@ -100,8 +100,8 @@ class AuthService:
             )
 
         stmt = select(User).where(User.id == token_data.user_id)
-        result = await run_in_threadpool(self.session.exec, stmt)
-        user = result.first()
+        result = await self.session.execute(stmt)
+        user = result.scalar_one_or_none()
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

@@ -1,20 +1,21 @@
 """
 Tests for authentication functionality
 """
-from schemas.auth import LoginRequest
 import pytest
-from fastapi.testclient import TestClient
-from services.user_service import UserService
-from schemas.user import UserCreate
+from httpx import AsyncClient
 from services.auth_service import AuthService
+from schemas.auth import LoginRequest
+from sqlalchemy.ext.asyncio import AsyncSession
+from redis.asyncio import Redis
+from schemas.user import UserCreate
 
 
 class TestAuthentication:
     """Test class for authentication endpoints"""
 
     @pytest.mark.asyncio
-    async def test_login_success(self, session, redis_client, make_user):
-        make_user(email="ok@example.com", password="Secret123!")
+    async def test_login_success(self, session: AsyncSession, redis_client: Redis, make_user):
+        await make_user(email="ok@example.com", password="Secret123!")
         svc = AuthService(session, redis_client)
         resp = await svc.login(
             LoginRequest(
@@ -23,9 +24,10 @@ class TestAuthentication:
         )
         assert resp.user.email == "ok@example.com"
 
-    def test_login_invalid_credentials(self, client: TestClient):
+    @pytest.mark.asyncio
+    async def test_login_invalid_credentials(self, client: AsyncClient):
         """Test login with invalid credentials"""
-        response = client.post("/api/v1/auth/login", json={
+        response = await client.post("/api/v1/auth/login", json={
             "email": "nonexistent@example.com",
             "password": "wrongpassword"
         })
@@ -36,27 +38,18 @@ class TestAuthentication:
     @pytest.mark.asyncio
     async def test_logout_success(
         self,
-        client: TestClient,
-        session,
+        client: AsyncClient,
         sample_user_data,
+        make_user,
+        auth_header
     ):
         """Test successful logout"""
         # Create user and login
-        user_service = UserService(session)
-        user_create = UserCreate(**sample_user_data)
-        await user_service.create_user(user_create)
-
-        login_response = client.post("/api/v1/auth/login", json={
-            "email": sample_user_data["email"],
-            "password": sample_user_data["password"]
-        })
-
-        token = login_response.json()["access_token"]
+        await make_user(**sample_user_data)
+        headers = await auth_header(sample_user_data["email"], sample_user_data["password"])
 
         # Test logout
-        response = client.post("/api/v1/auth/logout", headers={
-            "Authorization": f"Bearer {token}"
-        })
+        response = await client.post("/api/v1/auth/logout", headers=headers)
 
         assert response.status_code == 200
         assert "Successfully logged out" in response.json()["message"]
@@ -64,41 +57,34 @@ class TestAuthentication:
     @pytest.mark.asyncio
     async def test_get_current_user_info(
         self,
-        client: TestClient,
-        session,
+        client: AsyncClient,
         sample_user_data,
+        make_user,
+        auth_header,
     ):
         """Test getting current user information"""
         # Create user and login
-        user_service = UserService(session)
-        user_create = UserCreate(**sample_user_data)
-        await user_service.create_user(user_create)
-
-        login_response = client.post("/api/v1/auth/login", json={
-            "email": sample_user_data["email"],
-            "password": sample_user_data["password"]
-        })
-
-        token = login_response.json()["access_token"]
+        await make_user(**sample_user_data)
+        headers = await auth_header(sample_user_data["email"], sample_user_data["password"])
 
         # Test get user info
-        response = client.get("/api/v1/auth/me", headers={
-            "Authorization": f"Bearer {token}"
-        })
+        response = await client.get("/api/v1/auth/me", headers=headers)
 
         assert response.status_code == 200
         data = response.json()
         assert "permissions" in data
         assert "roles" in data
 
-    def test_protected_endpoint_without_token(self, client: TestClient):
+    @pytest.mark.asyncio
+    async def test_protected_endpoint_without_token(self, client: AsyncClient):
         """Test accessing protected endpoint without token"""
-        response = client.get("/api/v1/auth/me")
+        response = await client.get("/api/v1/auth/me")
         assert response.status_code == 401
 
-    def test_protected_endpoint_with_invalid_token(self, client: TestClient):
+    @pytest.mark.asyncio
+    async def test_protected_endpoint_with_invalid_token(self, client: AsyncClient):
         """Test accessing protected endpoint with invalid token"""
-        response = client.get("/api/v1/auth/me", headers={
+        response = await client.get("/api/v1/auth/me", headers={
             "Authorization": "Bearer invalid_token"
         })
         assert response.status_code == 401
