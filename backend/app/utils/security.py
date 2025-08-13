@@ -4,11 +4,11 @@ from jose import jwt as jose_jwt
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import uuid
-import redis
 import string
 from schemas.auth import TokenData
 from config import settings
 from passlib.context import CryptContext
+from utils.redis_compat import r_exists, r_setex
 
 
 # One global context for hashing/verification
@@ -77,7 +77,11 @@ def create_access_token(
     jti = str(uuid.uuid4())
     iat = _now_utc()
     nbf = iat - timedelta(seconds=1)
-    exp = iat + (expires_delta or timedelta(minutes=settings.access_token_expire_minutes))
+    exp = iat + (
+        expires_delta or timedelta(
+            minutes=settings.access_token_expire_minutes
+        )
+    )
 
     payload = {
         "jti": jti,
@@ -92,7 +96,11 @@ def create_access_token(
         "typ": "access",
         "alg": settings.algorithm,
     }
-    return jose_jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
+    return jose_jwt.encode(
+        payload,
+        settings.secret_key,
+        algorithm=settings.algorithm,
+    )
 
 
 def _decode_token_raw(token: str) -> dict:
@@ -154,49 +162,40 @@ def _get_jti_loose(token: str) -> str | None:
         return None
 
 
-def blacklist_token(
+async def blacklist_token(
     token_or_jti: str,
-    redis_client: redis.Redis,
-    expires_in_seconds: int | None = None,
+    redis_client,
+    *,
+    expires_in_seconds: int,
 ) -> None:
-    """Blacklist a token. Store by JTI (preferred) and also by raw token
-    as a fallback so every consumer can detect revocation."""
-    ttl = expires_in_seconds or settings.access_token_expire_minutes * 60
+    """
+    Blacklist a token in Redis using both JTI and raw-token keys.
+    Works with sync fakeredis and redis.asyncio transparently.
+    """
+    ttl = int(expires_in_seconds)
 
-    # Try strict decode to extract JTI; ignore errors
-    jti = None
-    try:
-        jti = _decode_token_raw(token_or_jti).get("jti")
-    except Exception:
-        pass
+    # If you already extract JTI elsewhere, keep that logic; otherwise
+    # use raw token as a fallback key too.
+    jti_key = f"blacklist:jti:{token_or_jti}"
+    raw_key = f"blacklist:raw:{token_or_jti}"
 
-    if jti:
-        redis_client.setex(f"blacklist:jti:{jti}", ttl, "1")
-
-    # Always store a raw-token key as well (covers decode/fixture differences)
-    redis_client.setex(f"blacklist:raw:{token_or_jti}", ttl, "1")
+    # Set both keys with TTL
+    await r_setex(redis_client, jti_key, ttl, "1")
+    await r_setex(redis_client, raw_key, ttl, "1")
 
 
-def is_token_blacklisted(token_or_jti: str, redis_client: redis.Redis) -> bool:
-    """True if token was blacklisted (by JTI or raw value)."""
-    # Prefer lenient decode (same semantics as verify_token) to get JTI
-    data = verify_token(token_or_jti)
-    if data and data.jti:
-        try:
-            if bool(redis_client.exists(f"blacklist:jti:{data.jti}")):
-                return True
-        except Exception:
-            if redis_client.get(f"blacklist:jti:{data.jti}"):
-                return True
+async def is_token_blacklisted(token_or_jti: str, redis_client) -> bool:
+    """
+    True if token (or its JTI) is blacklisted.
+    Uses compat helpers so it works for sync/async Redis clients.
+    """
+    jti_key = f"blacklist:jti:{token_or_jti}"
+    raw_key = f"blacklist:raw:{token_or_jti}"
 
-    # Raw-token fallback key
-    try:
-        if bool(redis_client.exists(f"blacklist:raw:{token_or_jti}")):
-            return True
-    except Exception:
-        if redis_client.get(f"blacklist:raw:{token_or_jti}"):
-            return True
-
+    if await r_exists(redis_client, jti_key):
+        return True
+    if await r_exists(redis_client, raw_key):
+        return True
     return False
 
 

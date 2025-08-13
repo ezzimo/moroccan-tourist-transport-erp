@@ -1,11 +1,13 @@
 from fastapi import Depends, HTTPException, status, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlmodel import Session, select
-from database import get_session, get_redis
+from sqlmodel import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from database_async import get_async_session, get_async_redis
 from models.user import User
 from utils.security import verify_token, is_token_blacklisted
+from utils.redis_compat import r_exists
 from schemas.auth import TokenData
-import redis
+from redis.asyncio import Redis
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,8 +16,8 @@ security = HTTPBearer(auto_error=False)
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Security(security),
-    session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis),
+    session: AsyncSession = Depends(get_async_session),
+    redis_client: Redis = Depends(get_async_redis),
 ) -> User:
     if credentials is None or not credentials.credentials:
         raise HTTPException(
@@ -25,24 +27,34 @@ async def get_current_user(
         )
     token = credentials.credentials
 
-    # Blacklist check
     try:
-        if is_token_blacklisted(token, redis_client):
+        # ✅ await the async helper
+        if await is_token_blacklisted(token, redis_client):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has been revoked",
+                headers={
+                    "WWW-Authenticate": "Bearer"
+                },
+            )
+
+        # ---- raw-token fallback using compat exists (async/sync safe) ----
+        if await r_exists(redis_client, f"blacklist:raw:{token}"):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has been revoked",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        # ---- fallback: also check the raw-token key directly ----
-        if redis_client.exists(f"blacklist:raw:{token}"):
+        # Optional safety: raw token key
+        if await redis_client.exists(f"blacklist:raw:{token}"):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has been revoked",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        # --------------------------------------------------------
+    except HTTPException:
+        raise
     except Exception as e:
-        # If anything goes wrong checking revocation, fail closed
         logger.debug("Blacklist check failed: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -58,10 +70,8 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Fetch user
-    user = session.exec(
-        select(User).where(User.id == token_data.user_id)
-    ).first()
+    result = await session.exec(select(User).where(User.id == token_data.user_id))
+    user = result.first()
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -71,14 +81,9 @@ async def get_current_user(
     return user
 
 
-# ✅ Add this wrapper so routers can depend on an “active” user
 async def get_current_active_user(
     user: User = Depends(get_current_user),
 ) -> User:
-    """
-    Ensure the authenticated user is active, not locked, and not deleted.
-    Return the user if all checks pass, otherwise raise 403.
-    """
     if user.deleted_at is not None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="User is deleted"
@@ -96,17 +101,11 @@ async def get_current_active_user(
     return user
 
 
-# (Optional) central permission guard if you don’t already have it here.
 def require_permission(service: str, action: str, resource: str):
-    """
-    Dependency factory to enforce a specific permission triple.
-    """
-
     def _dep(
-            user: User = Depends(get_current_active_user)
+        user: User = Depends(get_current_active_user),
     ) -> None:
         if not user.has_permission(service, action, resource):
-            # prefer 403 for “authenticated but not allowed”
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not enough permissions",

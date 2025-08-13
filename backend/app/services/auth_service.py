@@ -1,10 +1,10 @@
 """
-Authentication service for login/logout operations (async API, threadpool-backed)
+Authentication service with sync/async DB & Redis compatibility
 """
 
-from sqlmodel import Session, select
+from __future__ import annotations
+from sqlmodel import select
 from fastapi import HTTPException, status
-from fastapi.concurrency import run_in_threadpool
 from models.user import User
 from schemas.auth import LoginRequest, LoginResponse
 from schemas.user import UserResponse
@@ -17,40 +17,29 @@ from utils.security import (
 )
 from config import settings
 from datetime import datetime, timedelta
-import redis
+from typing import Any
+from utils.db_compat import exec_first, commit, refresh, add
+from utils.redis_compat import r_exists
+
 import logging
 
 logger = logging.getLogger(__name__)
 
 
 class AuthService:
-    """Service for handling authentication operations"""
-
-    def __init__(self, session: Session | None, redis_client: redis.Redis):
+    def __init__(self, session: Any, redis_client: Any):
         self.session = session
         self.redis = redis_client
 
-    # -------------------- Public async wrappers --------------------
-
     async def login(self, login_data: LoginRequest) -> LoginResponse:
-        return await run_in_threadpool(self._login_sync, login_data)
-
-    async def logout(self, token: str) -> dict:
-        return await run_in_threadpool(self._logout_sync, token)
-
-    async def verify_token(self, token: str) -> User:
-        return await run_in_threadpool(self._verify_token_sync, token)
-
-    # -------------------- Internal sync implementations --------------------
-
-    def _login_sync(self, login_data: LoginRequest) -> LoginResponse:
         assert self.session is not None, "DB session required for login"
 
         logger.info("Login attempt for email=%s", login_data.email)
-        statement = select(User).where(User.email == login_data.email)
-        user = self.session.exec(statement).first()
+        user = await exec_first(
+            self.session, select(User).where(User.email == login_data.email)
+        )
 
-        if not user or not verify_password(login_data.password, user.password_hash):
+        if (not user) or (not verify_password(login_data.password, user.password_hash)):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",
@@ -63,9 +52,9 @@ class AuthService:
             )
 
         user.last_login_at = datetime.utcnow()
-        self.session.add(user)
-        self.session.commit()
-        self.session.refresh(user)
+        await add(self.session, user)
+        await commit(self.session)
+        await refresh(self.session, user)
 
         expires = timedelta(minutes=settings.access_token_expire_minutes)
         access_token = create_access_token(
@@ -83,37 +72,33 @@ class AuthService:
             user=UserResponse.model_validate(user),
         )
 
-    def _logout_sync(self, token: str) -> dict:
+    async def logout(self, token: str) -> dict:
         expires = settings.access_token_expire_minutes * 60
-        blacklist_token(token, self.redis, expires_in_seconds=expires)
+        # blacklist_token must accept sync or async redis (see utils.security)
+        await blacklist_token(token, self.redis, expires_in_seconds=expires)
         logger.info("Logout: token blacklisted")
         return {"message": "Successfully logged out"}
 
-    def _verify_token_sync(self, token: str) -> User:
+    async def verify_token(self, token: str) -> User:
         assert self.session is not None, "DB session required for verify_token"
 
-        if is_token_blacklisted(token, self.redis):
+        if await is_token_blacklisted(token, self.redis):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has been revoked",
             )
 
         token_data = decode_jwt(token)
-        logger.debug(
-            "Verifying token for user_id=%s", getattr(token_data, "user_id", None)
-        )
         if not token_data:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid token",
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
             )
 
-        statement = select(User).where(User.id == token_data.user_id)
-        user = self.session.exec(statement).first()
+        user = await exec_first(
+            self.session, select(User).where(User.id == token_data.user_id)
+        )
         if not user:
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found",
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
             )
-
         return user

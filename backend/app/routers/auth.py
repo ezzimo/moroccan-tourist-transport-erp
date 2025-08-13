@@ -1,11 +1,14 @@
 """
-Authentication routes for login, logout, and OTP operations (async, centralized rate limiting)
+Authentication routes (compat + centralized rate limiting)
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Body
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlmodel import Session
-from database import get_session, get_redis
+from database import (
+    get_session,
+    get_redis,
+)  # keep your sync providers (tests rely on them)
 from services.auth_service import AuthService
 from services.otp_service import OTPService
 from schemas.auth import (
@@ -18,35 +21,21 @@ from schemas.auth import (
 )
 from schemas.user import RoleResponse, UserResponse
 from utils.dependencies import get_current_active_user
-from utils.rate_limiter import RateLimiter
-from datetime import timedelta
-import redis
+from utils.rate_limiter import login_rate_limit, otp_rate_limit
 from models.user import User
+import redis
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 security = HTTPBearer()
 
 
-def login_rate_limit(
-    request: Request,
-    login_data: LoginRequest = Body(...),
-    redis_client: redis.Redis = Depends(get_redis),
-) -> None:
-    """Single increment, centralized."""
-    key = f"rl:login:{login_data.email.lower()}"
-    window_sec = int(timedelta(minutes=1).total_seconds())
-    RateLimiter(
-        redis_client, max_attempts=5, window_seconds=window_sec, key=key
-    ).check_or_raise()
-
-
-@router.post("/login", response_model=LoginResponse)
+@router.post(
+    "/login", response_model=LoginResponse, dependencies=[Depends(login_rate_limit())]
+)
 async def login(
-    request: Request,
     login_data: LoginRequest,
     session: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    _: None = Depends(login_rate_limit),
 ):
     auth_service = AuthService(session, redis_client)
     return await auth_service.login(login_data)
@@ -61,24 +50,10 @@ async def logout(
     return await auth_service.logout(credentials.credentials)
 
 
-def otp_rate_limit(
-    request: Request,
-    otp_data: OTPRequest,
-    redis_client: redis.Redis = Depends(get_redis),
-) -> None:
-    key = f"rl:otp:{otp_data.email.lower()}"
-    window_sec = int(timedelta(minutes=1).total_seconds())
-    RateLimiter(
-        redis_client, max_attempts=3, window_seconds=window_sec, key=key
-    ).check_or_raise()
-
-
-@router.post("/send-otp")
+@router.post("/send-otp", dependencies=[Depends(otp_rate_limit())])
 async def send_otp(
-    request: Request,
     otp_data: OTPRequest,
     redis_client: redis.Redis = Depends(get_redis),
-    _: None = Depends(otp_rate_limit),
 ):
     otp_service = OTPService(redis_client)
     return await otp_service.send_otp(otp_data.email)
@@ -93,7 +68,7 @@ async def verify_otp(
     success = await otp_service.verify_otp(otp_data.email, otp_data.otp_code)
     if success:
         return {"message": "OTP verified successfully"}
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP")
+    raise HTTPException(status_code=400, detail="Invalid OTP")
 
 
 @router.get("/me", response_model=UserMeResponse)
@@ -101,7 +76,6 @@ async def get_current_user_info(
     current_user: User = Depends(get_current_active_user),
 ) -> UserMeResponse:
     permissions = current_user.get_all_permissions()
-
     role_objects = []
     for role in current_user.roles:
         role_dict = {
@@ -111,13 +85,13 @@ async def get_current_user_info(
             "description": role.description,
         }
         role_objects.append(RoleResponse.model_validate(role_dict))
-
     user_dict = UserResponse.model_validate(current_user).model_dump()
     return UserMeResponse(**user_dict, roles=role_objects, permissions=permissions)
 
 
 @router.get("/permissions", response_model=PermissionsResponse)
 async def get_user_permissions(current_user: User = Depends(get_current_active_user)):
-    permissions = current_user.get_all_permissions()
-    roles = [role.name for role in current_user.roles]
-    return PermissionsResponse(permissions=permissions, roles=roles)
+    return PermissionsResponse(
+        permissions=current_user.get_all_permissions(),
+        roles=[r.name for r in current_user.roles],
+    )
