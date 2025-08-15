@@ -1,26 +1,26 @@
 """
 Configuration settings for the CRM microservice
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "postgresql://user:password@localhost:5432/crm_db"
+    database_url: str
     
     # Redis
-    redis_url: str = "redis://localhost:6379/1"
+    redis_url: str
     
     # Auth Service Integration
-    auth_service_url: str = "http://localhost:8000"
+    auth_service_url: str
     
     # JWT (for token validation)
-    secret_key: str = "your-super-secret-jwt-key-change-in-production"
+    secret_key: str
     algorithm: str = "HS256"
     
     # CORS
-    allowed_origins: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    allowed_origins: List[str]
     
     # Environment
     environment: str = "development"
@@ -32,9 +32,8 @@ class Settings(BaseSettings):
     
     # GDPR Compliance
     data_retention_days: int = 2555  # 7 years for Morocco business records
-    
-    class Config:
-        env_file = ".env"
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()
