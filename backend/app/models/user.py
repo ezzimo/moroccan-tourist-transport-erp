@@ -68,7 +68,7 @@ class User(SQLModel, table=True):
     # Relationships
     roles: list["Role"] = Relationship(
         back_populates="users",
-        link_model=UserRole
+        link_model=UserRole,
     )
 
     def has_permission(

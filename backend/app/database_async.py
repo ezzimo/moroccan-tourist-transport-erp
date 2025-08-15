@@ -4,12 +4,28 @@ Async database & Redis providers
 
 from typing import AsyncGenerator
 from sqlmodel import SQLModel
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import (
+    create_async_engine,
+    AsyncSession,
+    async_sessionmaker,
+)
+from sqlalchemy.orm import sessionmaker
 from config import settings
 from redis.asyncio import Redis
 
 _engine = None
 _redis_client = None
+
+async_engine = create_async_engine(
+    settings.database_url_async,
+    echo=False,
+    future=True,
+)
+
+async_session_maker = sessionmaker(
+    async_engine, class_=AsyncSession, expire_on_commit=False
+)
+
 
 def get_async_engine():
     global _engine
@@ -22,6 +38,7 @@ def get_async_engine():
         )
     return _engine
 
+
 def get_redis_client():
     global _redis_client
     if _redis_client is None:
@@ -30,6 +47,7 @@ def get_redis_client():
             decode_responses=True,
         )
     return _redis_client
+
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     engine = get_async_engine()
@@ -41,8 +59,10 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     async with SessionLocal() as session:
         yield session
 
+
 async def get_async_redis() -> Redis:
     return get_redis_client()
+
 
 async def init_models() -> None:
     engine = get_async_engine()
