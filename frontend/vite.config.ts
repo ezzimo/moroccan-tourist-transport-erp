@@ -8,6 +8,8 @@ export default defineConfig({
    * Routes different API endpoints to their respective microservices
    */
   server: {
+    port: 5173,
+    host: true, // Allow external connections
     proxy: {
       // Authentication service - port 8000
       "/api/v1/auth": {
