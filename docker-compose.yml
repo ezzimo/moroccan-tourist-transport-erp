@@ -56,7 +56,7 @@ services:
     ports:
     - 8001:8001
     env_file:
-    - ./backend/crm_service/.env.example
+    - ./backend/crm_service/.env
     depends_on:
     - db_crm
     networks:
