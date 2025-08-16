@@ -1,29 +1,29 @@
 """
 Configuration settings for the fleet management microservice
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "postgresql://user:password@localhost:5432/fleet_db"
+    database_url: str
     
     # Redis
-    redis_url: str = "redis://localhost:6379/4"
+    redis_url: str
     
     # Service Integration
-    auth_service_url: str = "http://localhost:8000"
-    crm_service_url: str = "http://localhost:8001"
-    booking_service_url: str = "http://localhost:8002"
-    tour_service_url: str = "http://localhost:8003"
+    auth_service_url: str
+    crm_service_url: str
+    booking_service_url: str
+    tour_service_url: str
     
     # JWT (for token validation)
-    secret_key: str = "your-super-secret-jwt-key-change-in-production"
+    secret_key: str
     algorithm: str = "HS256"
     
     # CORS
-    allowed_origins: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    allowed_origins: List[str]
     
     # Environment
     environment: str = "development"
@@ -41,8 +41,7 @@ class Settings(BaseSettings):
     max_file_size: int = 10 * 1024 * 1024  # 10MB
     allowed_file_types: List[str] = ["pdf", "jpg", "jpeg", "png", "doc", "docx"]
     
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env.example", extra="ignore")
 
 
 settings = Settings()

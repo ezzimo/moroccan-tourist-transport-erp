@@ -25,10 +25,12 @@ class RoleService:
         self.session = session
 
     async def create_role(self, role_data: RoleCreate) -> RoleResponse:
-        existing = await self.session.exec(
+        existing = await self.session.execute(
             select(Role).where(Role.name == role_data.name)
         )
-        if existing.first():
+        if (
+            existing.scalar_one_or_none()
+        ):  # Changed from first() to scalar_one_or_none()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Role name already exists",
@@ -44,8 +46,14 @@ class RoleService:
         return RoleResponse.model_validate(role)
 
     async def get_role(self, role_id: uuid.UUID) -> RoleWithPermissions:
-        res = await self.session.exec(select(Role).where(Role.id == role_id))
-        role = res.first()
+        # Load role with permissions relationship
+        stmt = (
+            select(Role)
+            .options(selectinload(Role.permissions))
+            .where(Role.id == role_id)
+        )
+        res = await self.session.execute(stmt)
+        role = res.scalar_one_or_none()  # Changed from first() to scalar_one_or_none()
         if not role:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
@@ -61,14 +69,17 @@ class RoleService:
             .offset(skip)
             .limit(limit)
         )
-        roles = (await self.session.exec(stmt)).all()
-        return [RoleWithPermissions.model_validate(r) for r in roles]
+        result = await self.session.execute(stmt)
+        roles = (
+            result.scalars().all()
+        )  # Changed: use scalars() to get the actual objects
+        return [RoleWithPermissions.model_validate(role) for role in roles]
 
     async def update_role(
         self, role_id: uuid.UUID, role_data: RoleUpdate
     ) -> RoleResponse:
-        res = await self.session.exec(select(Role).where(Role.id == role_id))
-        role = res.first()
+        res = await self.session.execute(select(Role).where(Role.id == role_id))
+        role = res.scalar_one_or_none()  # Changed from first() to scalar_one_or_none()
         if not role:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
@@ -89,8 +100,8 @@ class RoleService:
         return RoleResponse.model_validate(role)
 
     async def delete_role(self, role_id: uuid.UUID) -> dict:
-        res = await self.session.exec(select(Role).where(Role.id == role_id))
-        role = res.first()
+        res = await self.session.execute(select(Role).where(Role.id == role_id))
+        role = res.scalar_one_or_none()  # Changed from first() to scalar_one_or_none()
         if not role:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
@@ -102,14 +113,14 @@ class RoleService:
     async def create_permission(
         self, permission_data: PermissionCreate
     ) -> PermissionResponse:
-        res = await self.session.exec(
+        res = await self.session.execute(
             select(Permission).where(
                 Permission.service_name == permission_data.service_name,
                 Permission.action == permission_data.action,
                 Permission.resource == permission_data.resource,
             )
         )
-        if res.first():
+        if res.scalar_one_or_none():  # Changed from first() to scalar_one_or_none()
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Permission already exists",
@@ -123,15 +134,19 @@ class RoleService:
     async def get_permissions(
         self, skip: int = 0, limit: int = 100
     ) -> list[PermissionResponse]:
-        res = await self.session.exec(select(Permission).offset(skip).limit(limit))
-        perms = res.all()
-        return [PermissionResponse.model_validate(p) for p in perms]
+        result = await self.session.execute(
+            select(Permission).offset(skip).limit(limit)
+        )
+        perms = (
+            result.scalars().all()
+        )  # Changed: use scalars() to get the actual objects
+        return [PermissionResponse.model_validate(perm) for perm in perms]
 
     async def delete_permission(self, permission_id: uuid.UUID) -> dict:
-        res = await self.session.exec(
+        res = await self.session.execute(
             select(Permission).where(Permission.id == permission_id)
         )
-        perm = res.first()
+        perm = res.scalar_one_or_none()  # Changed from first() to scalar_one_or_none()
         if not perm:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Permission not found"
@@ -143,17 +158,21 @@ class RoleService:
     async def _assign_permissions(
         self, role_id: uuid.UUID, permission_ids: list[uuid.UUID]
     ):
-        res = await self.session.exec(
+        # Delete existing role permissions
+        result = await self.session.execute(
             select(RolePermission).where(RolePermission.role_id == role_id)
         )
-        existing = res.all()
+        existing = result.scalars().all()  # Changed: use scalars()
         for rp in existing:
             await self.session.delete(rp)
 
+        # Add new permissions
         for pid in permission_ids:
-            check = await self.session.exec(
+            check = await self.session.execute(
                 select(Permission).where(Permission.id == pid)
             )
-            if check.first():
+            if (
+                check.scalar_one_or_none()
+            ):  # Changed from first() to scalar_one_or_none()
                 self.session.add(RolePermission(role_id=role_id, permission_id=pid))
         await self.session.commit()

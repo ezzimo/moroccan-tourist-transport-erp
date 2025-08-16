@@ -26,7 +26,13 @@ async def create_vehicle(
     vehicle_data: VehicleCreate,
     session: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(require_permission("fleet", "create", "vehicles"))
+    current_user: CurrentUser = Depends(
+        require_permission(
+            "fleet",
+            "create",
+            "vehicles",
+        )
+    )
 ):
     """Create a new vehicle"""
     vehicle_service = VehicleService(session, redis_client)
