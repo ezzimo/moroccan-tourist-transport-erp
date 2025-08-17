@@ -1,30 +1,30 @@
 """
 Configuration settings for the driver management microservice
 """
-from pydantic_settings import BaseSettings
-from typing import List
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import List, Dict
 
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "postgresql://user:password@localhost:5432/driver_db"
+    database_url: str
     
     # Redis
-    redis_url: str = "redis://localhost:6379/10"
+    redis_url: str
     
     # Service Integration
-    auth_service_url: str = "http://localhost:8000"
-    tour_service_url: str = "http://localhost:8003"
-    fleet_service_url: str = "http://localhost:8004"
-    hr_service_url: str = "http://localhost:8005"
-    notification_service_url: str = "http://localhost:8007"
+    auth_service_url: str
+    tour_service_url: str
+    fleet_service_url: str
+    hr_service_url: str
+    notification_service_url: str
     
     # JWT (for token validation)
-    secret_key: str = "your-super-secret-jwt-key-change-in-production"
+    secret_key: str
     algorithm: str = "HS256"
     
     # CORS
-    allowed_origins: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    allowed_origins: List[str]
     
     # Environment
     environment: str = "development"
@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     
     # File Upload
     max_file_size: int = 10 * 1024 * 1024  # 10MB
-    allowed_file_types: List[str] = ["pdf", "jpg", "jpeg", "png", "doc", "docx"]
+    allowed_file_types: List[str]
     
     # Mobile API Configuration
     mobile_session_timeout: int = 86400  # 24 hours
@@ -53,15 +53,14 @@ class Settings(BaseSettings):
     
     # Performance Tracking
     performance_review_period_months: int = 6
-    incident_severity_weights: dict = {
+    incident_severity_weights: Dict[str, int] = {
         "minor": 1,
         "moderate": 3,
         "major": 5,
         "critical": 10
     }
     
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()

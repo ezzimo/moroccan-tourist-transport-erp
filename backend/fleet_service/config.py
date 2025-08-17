@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     max_file_size: int = 10 * 1024 * 1024  # 10MB
     allowed_file_types: List[str] = ["pdf", "jpg", "jpeg", "png", "doc", "docx"]
     
-    model_config = SettingsConfigDict(env_file=".env.example", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()

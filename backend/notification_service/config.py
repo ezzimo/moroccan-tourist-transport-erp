@@ -1,32 +1,32 @@
 """
 Configuration settings for the notification microservice
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List, Dict, Any
 
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "postgresql://user:password@localhost:5432/notification_db"
+    database_url: str
     
     # Redis
-    redis_url: str = "redis://localhost:6379/7"
+    redis_url: str
     
     # Service Integration
-    auth_service_url: str = "http://localhost:8000"
-    crm_service_url: str = "http://localhost:8001"
-    booking_service_url: str = "http://localhost:8002"
-    tour_service_url: str = "http://localhost:8003"
-    fleet_service_url: str = "http://localhost:8004"
-    hr_service_url: str = "http://localhost:8005"
-    financial_service_url: str = "http://localhost:8006"
+    auth_service_url: str
+    crm_service_url: str
+    booking_service_url: str
+    tour_service_url: str
+    fleet_service_url: str
+    hr_service_url: str
+    financial_service_url: str
     
     # JWT (for token validation)
-    secret_key: str = "your-super-secret-jwt-key-change-in-production"
+    secret_key: str
     algorithm: str = "HS256"
     
     # CORS
-    allowed_origins: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    allowed_origins: List[str]
     
     # Environment
     environment: str = "development"
@@ -42,26 +42,26 @@ class Settings(BaseSettings):
     notification_timeout_seconds: int = 30
     
     # Email Configuration (SMTP)
-    smtp_host: str = "smtp.gmail.com"
-    smtp_port: int = 587
-    smtp_username: str = ""
-    smtp_password: str = ""
+    smtp_host: str
+    smtp_port: int
+    smtp_username: str
+    smtp_password: str
     smtp_use_tls: bool = True
-    default_from_email: str = "noreply@atlastours.ma"
-    default_from_name: str = "Atlas Tours Morocco"
+    default_from_email: str
+    default_from_name: str
     
     # SMS Configuration (Twilio)
-    twilio_account_sid: str = ""
-    twilio_auth_token: str = ""
-    twilio_phone_number: str = ""
+    twilio_account_sid: str
+    twilio_auth_token: str
+    twilio_phone_number: str
     
     # Push Notification Configuration (Firebase)
-    firebase_server_key: str = ""
-    firebase_project_id: str = ""
+    firebase_server_key: str
+    firebase_project_id: str
     
     # WhatsApp Configuration (optional)
-    whatsapp_api_url: str = ""
-    whatsapp_api_token: str = ""
+    whatsapp_api_url: str
+    whatsapp_api_token: str
     
     # Rate Limiting
     rate_limit_per_minute: int = 100
@@ -83,8 +83,7 @@ class Settings(BaseSettings):
     webhook_timeout_seconds: int = 10
     webhook_retry_attempts: int = 2
     
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()

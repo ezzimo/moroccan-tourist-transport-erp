@@ -5,7 +5,7 @@ from fastapi import Depends, HTTPException, status, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from config import settings
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 import httpx
 import uuid
 
@@ -33,19 +33,27 @@ async def verify_auth_token(token: str) -> Optional[Dict[str, Any]]:
     try:
         # First try local JWT verification for performance
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        print(f"Local JWT verification successful: {payload.get('email', 'unknown')}")
         return payload
-    except JWTError:
+    except JWTError as e:
+        print(f"Local JWT verification failed: {e}")
         # If local verification fails, check with auth service
         try:
+            print(f"Calling auth service at: {settings.auth_service_url}/api/v1/auth/me")
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     f"{settings.auth_service_url}/api/v1/auth/me",
                     headers={"Authorization": f"Bearer {token}"}
                 )
+                print(f"Auth service response status: {response.status_code}")
                 if response.status_code == 200:
-                    return response.json()
-        except:
-            pass
+                    user_data = response.json()
+                    print(f"Auth service returned user: {user_data.get('email', 'unknown')}")
+                    return user_data
+                else:
+                    print(f"Auth service error: {response.text}")
+        except Exception as e:
+            print(f"Error calling auth service: {e}")
     return None
 
 
@@ -70,7 +78,7 @@ async def get_current_user(
         if "permissions" in user_data:
             # Response from auth service
             return CurrentUser(
-                user_id=uuid.UUID(user_data["user_id"]),
+                user_id=uuid.UUID(user_data["id"]),
                 email=user_data["email"],
                 full_name=user_data.get("full_name", ""),
                 permissions=user_data["permissions"]
@@ -90,8 +98,15 @@ async def get_current_user(
                         full_name=user_data.get("full_name", ""),
                         permissions=permissions_data["permissions"]
                     )
-    except Exception:
-        pass
+    except KeyError as e:
+        print(f"Missing field in user data: {e}")
+        print(f"User data received: {user_data}")
+    except ValueError as e:
+        print(f"Invalid UUID format: {e}")
+        print(f"User data received: {user_data}")
+    except Exception as e:
+        print(f"Unexpected error in authentication: {e}")
+        print(f"User data received: {user_data}")
     
     raise credentials_exception
 
