@@ -80,7 +80,7 @@ services:
     ports:
     - 8002:8002
     env_file:
-    - ./backend/booking_service/.env.example
+    - ./backend/booking_service/.env
     depends_on:
     - db_booking
     networks:
@@ -104,7 +104,7 @@ services:
     ports:
     - 8003:8003
     env_file:
-    - ./backend/driver_service/.env.example
+    - ./backend/driver_service/.env
     depends_on:
     - db_driver
     networks:
@@ -128,7 +128,7 @@ services:
     ports:
     - 8004:8004
     env_file:
-    - ./backend/fleet_service/.env.example
+    - ./backend/fleet_service/.env
     depends_on:
     - db_fleet
     networks:
@@ -152,7 +152,7 @@ services:
     ports:
     - 8005:8005
     env_file:
-    - ./backend/financial_service/.env.example
+    - ./backend/financial_service/.env
     depends_on:
     - db_financial
     networks:
@@ -176,7 +176,7 @@ services:
     ports:
     - 8006:8006
     env_file:
-    - ./backend/hr_service/.env.example
+    - ./backend/hr_service/.env
     depends_on:
     - db_hr
     networks:
@@ -200,7 +200,7 @@ services:
     ports:
     - 8007:8007
     env_file:
-    - ./backend/inventory_service/.env.example
+    - ./backend/inventory_service/.env
     depends_on:
     - db_inventory
     networks:
@@ -224,7 +224,7 @@ services:
     ports:
     - 8008:8008
     env_file:
-    - ./backend/notification_service/.env.example
+    - ./backend/notification_service/.env
     depends_on:
     - db_notification
     networks:
@@ -248,7 +248,7 @@ services:
     ports:
     - 8009:8009
     env_file:
-    - ./backend/qa_service/.env.example
+    - ./backend/qa_service/.env
     depends_on:
     - db_qa
     networks:
@@ -272,7 +272,7 @@ services:
     ports:
     - 8010:8010
     env_file:
-    - ./backend/tour_service/.env.example
+    - ./backend/tour_service/.env
     depends_on:
     - db_tour
     networks:
