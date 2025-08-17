@@ -4,7 +4,7 @@ services:
   financial_app:
     build: .
     ports:
-      - "8005:8005"
+      - "8006:8006"
     environment:
       - DATABASE_URL=postgresql://postgres:password@financial_db:5432/financial_db
       - REDIS_URL=redis://financial_redis:6379/6
@@ -22,7 +22,7 @@ services:
     volumes:
       - .:/app
       - ./uploads:/app/uploads
-    command: uvicorn financial_service.main:app --host 0.0.0.0 --port 8005 --reload
+    command: uvicorn financial_service.main:app --host 0.0.0.0 --port 8006 --reload
 
   financial_db:
     image: postgres:15
