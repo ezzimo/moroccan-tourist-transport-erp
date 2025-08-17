@@ -1,27 +1,27 @@
 """
 Configuration settings for the booking microservice
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "postgresql://user:password@localhost:5432/booking_db"
+    database_url: str
     
     # Redis
-    redis_url: str = "redis://localhost:6379/2"
+    redis_url: str
     
     # Auth Service Integration
-    auth_service_url: str = "http://localhost:8000"
-    crm_service_url: str = "http://localhost:8001"
+    auth_service_url: str
+    crm_service_url: str
     
     # JWT (for token validation)
-    secret_key: str = "your-super-secret-jwt-key-change-in-production"
+    secret_key: str
     algorithm: str = "HS256"
     
     # CORS
-    allowed_origins: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    allowed_origins: List[str]
     
     # Environment
     environment: str = "development"
@@ -44,8 +44,7 @@ class Settings(BaseSettings):
     company_phone: str = "+212 522 123 456"
     company_email: str = "info@atlastours.ma"
     
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()

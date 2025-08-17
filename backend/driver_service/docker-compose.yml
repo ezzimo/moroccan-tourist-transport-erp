@@ -4,7 +4,7 @@ services:
   driver_app:
     build: .
     ports:
-      - "8010:8010"
+      - "8003:8003"
     environment:
       - DATABASE_URL=postgresql://postgres:password@driver_db:5432/driver_db
       - REDIS_URL=redis://driver_redis:6379/10
@@ -21,7 +21,7 @@ services:
     volumes:
       - .:/app
       - ./uploads:/app/uploads
-    command: uvicorn driver_service.main:app --host 0.0.0.0 --port 8010 --reload
+    command: uvicorn driver_service.main:app --host 0.0.0.0 --port 8003 --reload
 
   driver_db:
     image: postgres:15

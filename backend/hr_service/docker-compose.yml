@@ -4,7 +4,7 @@ services:
   hr_app:
     build: .
     ports:
-      - "8005:8005"
+      - "8006:8006"
     environment:
       - DATABASE_URL=postgresql://postgres:password@hr_db:5432/hr_db
       - REDIS_URL=redis://hr_redis:6379/5
@@ -21,7 +21,7 @@ services:
     volumes:
       - .:/app
       - ./uploads:/app/uploads
-    command: uvicorn hr_service.main:app --host 0.0.0.0 --port 8005 --reload
+    command: uvicorn hr_service.main:app --host 0.0.0.0 --port 8006 --reload
 
   hr_db:
     image: postgres:15

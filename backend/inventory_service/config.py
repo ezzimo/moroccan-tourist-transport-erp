@@ -1,29 +1,29 @@
 """
 Configuration settings for the inventory management microservice
 """
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 
 class Settings(BaseSettings):
     # Database
-    database_url: str = "postgresql://user:password@localhost:5432/inventory_db"
+    database_url: str
     
     # Redis
-    redis_url: str = "redis://localhost:6379/8"
+    redis_url: str
     
     # Service Integration
-    auth_service_url: str = "http://localhost:8000"
-    fleet_service_url: str = "http://localhost:8004"
-    financial_service_url: str = "http://localhost:8006"
-    hr_service_url: str = "http://localhost:8005"
+    auth_service_url: str
+    fleet_service_url: str
+    financial_service_url: str
+    hr_service_url: str
     
     # JWT (for token validation)
-    secret_key: str = "your-super-secret-jwt-key-change-in-production"
+    secret_key: str
     algorithm: str = "HS256"
     
     # CORS
-    allowed_origins: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    allowed_origins: List[str]
     
     # Environment
     environment: str = "development"
@@ -57,10 +57,9 @@ class Settings(BaseSettings):
     
     # File Upload
     max_file_size: int = 10 * 1024 * 1024  # 10MB
-    allowed_file_types: List[str] = ["pdf", "jpg", "jpeg", "png", "xlsx", "csv"]
+    allowed_file_types: List[str]
     
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 
 settings = Settings()
