@@ -1,22 +1,20 @@
 import React, { memo, useCallback, useState, useEffect } from 'react';
-import { X, Activity, Clock, User, Shield, AlertCircle, RefreshCw } from 'lucide-react';
+import { X, Activity, Clock, User as UserIcon, Shield, AlertCircle, RefreshCw } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { userManagementApi } from '../api/userManagementApi';
-import { UserActivity, ACTIVITY_ACTIONS } from '../types/auth';
+import { UserActivity, ACTIVITY_ACTIONS, User } from '../types/auth';
 
 interface UserActivityModalProps {
   isOpen: boolean;
-  userId: string;
+  user: User;
   onClose: () => void;
 }
 
 const UserActivityModal = memo(function UserActivityModal({
   isOpen,
-  userId,
+  user,
   onClose
 }: UserActivityModalProps) {
-  console.log('🔧 UserActivityModal: Component initializing', { isOpen, userId });
-
   const { hasPermission } = useAuth();
   const [activities, setActivities] = useState<UserActivity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,67 +24,46 @@ const UserActivityModal = memo(function UserActivityModal({
   // Permission check
   const canViewActivity = hasPermission('auth', 'read', 'activity');
 
-  console.log('🔧 UserActivityModal: Permissions', { canViewActivity });
-
   // Load user activity
   const loadActivity = useCallback(async () => {
     if (!canViewActivity) {
-      console.warn('🔧 UserActivityModal: No activity read permission');
       setError('You do not have permission to view user activity');
       setLoading(false);
       return;
     }
 
-    console.log('🔧 UserActivityModal: Loading activity', { userId, limit });
-
     try {
       setLoading(true);
       setError(null);
       
-      const startTime = performance.now();
-      const activityData = await userManagementApi.getUserActivity(userId, limit);
-      const endTime = performance.now();
-      
-      console.log('🔧 UserActivityModal: Activity loaded', {
-        duration: `${(endTime - startTime).toFixed(2)}ms`,
-        activityCount: activityData.length,
-        userId
-      });
+      const activityData = await userManagementApi.getUserActivity(user.id, limit);
 
       setActivities(activityData);
       
     } catch (err: any) {
-      console.error('🔧 UserActivityModal: Error loading activity', {
-        error: err.message,
-        userId,
-        status: err.response?.status
-      });
-      
       setError(err.response?.data?.detail || 'Failed to load user activity');
       setActivities([]);
     } finally {
       setLoading(false);
     }
-  }, [userId, limit, canViewActivity]);
+  }, [user.id, limit, canViewActivity]);
 
-  // Load activity when modal opens or userId changes
+  // Load activity when modal opens or user changes
   useEffect(() => {
-    if (isOpen && userId) {
+    if (isOpen && user) {
       loadActivity();
     }
-  }, [isOpen, userId, loadActivity]);
+  }, [isOpen, user, loadActivity]);
 
   // Handle refresh
   const handleRefresh = useCallback(() => {
-    console.log('🔧 UserActivityModal: Manual refresh requested');
     loadActivity();
   }, [loadActivity]);
 
   // Handle load more
   const handleLoadMore = useCallback(() => {
-    console.log('🔧 UserActivityModal: Load more requested', { currentLimit: limit });
     setLimit(prev => prev + 50);
-  }, [limit]);
+  }, []);
 
   // Get activity icon and color
   const getActivityIcon = useCallback((action: string) => {
@@ -186,12 +163,6 @@ const UserActivityModal = memo(function UserActivityModal({
     );
   }
 
-  console.log('🔧 UserActivityModal: Rendering modal', {
-    activitiesCount: activities.length,
-    loading,
-    error
-  });
-
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
       <div className="relative top-10 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white">
@@ -203,7 +174,7 @@ const UserActivityModal = memo(function UserActivityModal({
               User Activity Log
             </h3>
             <p className="text-sm text-gray-500 mt-1">
-              Recent activity for user ID: {userId}
+              Recent activity for {user.full_name} ({user.email})
             </p>
           </div>
           <div className="flex items-center space-x-3">

@@ -13,6 +13,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { User, UserSearchResponse } from '../types/auth';
+import { formatDateTime } from '../../utils/formatters';
 
 interface UserManagementTableProps {
   users: User[];
@@ -22,7 +23,7 @@ interface UserManagementTableProps {
   onUserSelection: (userIds: string[]) => void;
   onEditUser: (user: User) => void;
   onDeleteUser: (userId: string) => void;
-  onViewActivity: (userId: string) => void;
+  onViewActivity: (user: User) => void;
   onPageChange: (page: number) => void;
   canUpdate: boolean;
   canDelete: boolean;
@@ -41,17 +42,8 @@ const UserManagementTable = memo(function UserManagementTable({
   canUpdate,
   canDelete
 }: UserManagementTableProps) {
-  console.log('🔧 UserManagementTable: Rendering', {
-    usersCount: users.length,
-    loading,
-    selectedCount: selectedUserIds.length,
-    canUpdate,
-    canDelete
-  });
-
   // Handle select all checkbox
   const handleSelectAll = useCallback((checked: boolean) => {
-    console.log('🔧 UserManagementTable: Select all toggled', { checked, usersCount: users.length });
     if (checked) {
       onUserSelection(users.map(user => user.id));
     } else {
@@ -61,7 +53,6 @@ const UserManagementTable = memo(function UserManagementTable({
 
   // Handle individual user selection
   const handleUserSelect = useCallback((userId: string, checked: boolean) => {
-    console.log('🔧 UserManagementTable: User selection toggled', { userId, checked });
     if (checked) {
       onUserSelection([...selectedUserIds, userId]);
     } else {
@@ -74,9 +65,8 @@ const UserManagementTable = memo(function UserManagementTable({
   const totalPages = searchResponse ? Math.ceil(searchResponse.total / searchResponse.limit) : 0;
 
   const handlePageClick = useCallback((page: number) => {
-    console.log('🔧 UserManagementTable: Page change requested', { page, currentPage });
     onPageChange(page);
-  }, [onPageChange, currentPage]);
+  }, [onPageChange]);
 
   // Get user status badge
   const getUserStatusBadge = useCallback((user: User) => {
@@ -168,14 +158,6 @@ const UserManagementTable = memo(function UserManagementTable({
 
   const isAllSelected = users.length > 0 && users.every(user => selectedUserIds.includes(user.id));
   const isPartiallySelected = selectedUserIds.length > 0 && !isAllSelected;
-
-  console.log('🔧 UserManagementTable: Rendering table', {
-    usersToRender: users.length,
-    isAllSelected,
-    isPartiallySelected,
-    currentPage,
-    totalPages
-  });
 
   return (
     <div className="bg-white rounded-lg border overflow-hidden">
@@ -272,26 +254,18 @@ const UserManagementTable = memo(function UserManagementTable({
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-500">
                   {user.last_login_at ? (
-                    <div>
-                      <div>{new Date(user.last_login_at).toLocaleDateString()}</div>
-                      <div className="text-xs text-gray-400">
-                        {new Date(user.last_login_at).toLocaleTimeString()}
-                      </div>
-                    </div>
+                    formatDateTime(user.last_login_at)
                   ) : (
                     <span className="text-gray-400">Never</span>
                   )}
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-500">
-                  <div>{new Date(user.created_at).toLocaleDateString()}</div>
-                  <div className="text-xs text-gray-400">
-                    {new Date(user.created_at).toLocaleTimeString()}
-                  </div>
+                  {formatDateTime(user.created_at)}
                 </td>
                 <td className="px-6 py-4 text-right">
                   <div className="flex items-center justify-end space-x-2">
                     <button
-                      onClick={() => onViewActivity(user.id)}
+                      onClick={() => onViewActivity(user)}
                       className="text-gray-400 hover:text-gray-600 p-1"
                       title="View Activity"
                     >

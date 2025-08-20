@@ -3,6 +3,7 @@ import { X, User, Mail, Phone, Shield, Lock, Unlock, CheckCircle, XCircle, Alert
 import { useAuth } from '../context/AuthContext';
 import { userManagementApi } from '../api/userManagementApi';
 import { User as UserType, UserUpdateRequest, Role } from '../types/auth';
+import { formatDate } from '../../utils/formatters';
 
 interface EditUserModalProps {
   isOpen: boolean;
@@ -17,15 +18,10 @@ const EditUserModal = memo(function EditUserModal({
   onClose,
   onUserUpdated
 }: EditUserModalProps) {
-  console.log('🔧 EditUserModal: Component initializing', { 
-    isOpen, 
-    userId: user?.id,
-    userEmail: user?.email 
-  });
-
   const { hasPermission } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Partial<Record<keyof UserUpdateRequest, string>>>({});
   const [roles, setRoles] = useState<Role[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'basic' | 'roles' | 'status'>('basic');
@@ -46,16 +42,9 @@ const EditUserModal = memo(function EditUserModal({
   const canUpdate = hasPermission('auth', 'update', 'users');
   const canManageRoles = hasPermission('auth', 'manage', 'roles');
 
-  console.log('🔧 EditUserModal: Permissions', { canUpdate, canManageRoles });
-
   // Initialize form data when user changes
   useEffect(() => {
     if (user && isOpen) {
-      console.log('🔧 EditUserModal: Initializing form data', {
-        userId: user.id,
-        userRoles: user.roles?.map(r => r.id)
-      });
-      
       setFormData({
         full_name: user.full_name || '',
         email: user.email || '',
@@ -67,7 +56,8 @@ const EditUserModal = memo(function EditUserModal({
         avatar_url: user.avatar_url || '',
         role_ids: user.roles?.map(role => role.id) || []
       });
-      setError(null);
+      setFormError(null);
+      setErrors({});
     }
   }, [user, isOpen]);
 
@@ -76,13 +66,11 @@ const EditUserModal = memo(function EditUserModal({
     if (isOpen) {
       const loadRoles = async () => {
         try {
-          console.log('🔧 EditUserModal: Loading roles');
           setRolesLoading(true);
           const rolesData = await userManagementApi.getRoles();
-          console.log('🔧 EditUserModal: Roles loaded', { count: rolesData.length });
           setRoles(rolesData);
         } catch (error) {
-          console.error('🔧 EditUserModal: Error loading roles', error);
+          // Handle error
         } finally {
           setRolesLoading(false);
         }
@@ -94,14 +82,13 @@ const EditUserModal = memo(function EditUserModal({
 
   // Handle form field changes
   const handleFieldChange = useCallback((field: keyof UserUpdateRequest, value: any) => {
-    console.log('🔧 EditUserModal: Field changed', { field, value });
     setFormData(prev => ({ ...prev, [field]: value }));
-    setError(null);
+    setErrors(prev => ({ ...prev, [field]: undefined }));
+    setFormError(null);
   }, []);
 
   // Handle role selection
   const handleRoleToggle = useCallback((roleId: string) => {
-    console.log('🔧 EditUserModal: Role toggled', { roleId });
     setFormData(prev => ({
       ...prev,
       role_ids: prev.role_ids?.includes(roleId)
@@ -113,15 +100,13 @@ const EditUserModal = memo(function EditUserModal({
   // Handle quick status actions
   const handleQuickAction = useCallback(async (action: string) => {
     if (!canUpdate) {
-      setError('You do not have permission to update users');
+      setFormError('You do not have permission to update users');
       return;
     }
 
-    console.log('🔧 EditUserModal: Quick action triggered', { action, userId: user.id });
-
     try {
       setLoading(true);
-      setError(null);
+      setFormError(null);
 
       switch (action) {
         case 'lock':
@@ -137,18 +122,13 @@ const EditUserModal = memo(function EditUserModal({
           setFormData(prev => ({ ...prev, must_change_password: true }));
           break;
         default:
-          console.warn('🔧 EditUserModal: Unknown quick action', { action });
+          // Unknown action
       }
 
-      console.log('🔧 EditUserModal: Quick action completed', { action });
       onUserUpdated();
       
     } catch (err: any) {
-      console.error('🔧 EditUserModal: Quick action failed', {
-        action,
-        error: err.message
-      });
-      setError(err.response?.data?.detail || `Failed to ${action} user`);
+      setFormError(err.response?.data?.detail || `Failed to ${action} user`);
     } finally {
       setLoading(false);
     }
@@ -156,28 +136,24 @@ const EditUserModal = memo(function EditUserModal({
 
   // Validate form
   const validateForm = useCallback(() => {
-    const errors: string[] = [];
+    const newErrors: Partial<Record<keyof UserUpdateRequest, string>> = {};
 
     if (!formData.full_name?.trim()) {
-      errors.push('Full name is required');
+      newErrors.full_name = 'Full name is required';
     }
 
     if (!formData.email?.trim()) {
-      errors.push('Email is required');
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      errors.push('Please enter a valid email address');
+      newErrors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email as string)) {
+      newErrors.email = 'Please enter a valid email address';
     }
 
     if (!formData.phone?.trim()) {
-      errors.push('Phone number is required');
+      newErrors.phone = 'Phone number is required';
     }
 
-    console.log('🔧 EditUserModal: Form validation', {
-      isValid: errors.length === 0,
-      errors
-    });
-
-    return errors;
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   }, [formData]);
 
   // Handle form submission
@@ -185,27 +161,17 @@ const EditUserModal = memo(function EditUserModal({
     e.preventDefault();
     
     if (!canUpdate) {
-      console.warn('🔧 EditUserModal: No update permission');
-      setError('You do not have permission to update users');
+      setFormError('You do not have permission to update users');
       return;
     }
 
-    const validationErrors = validateForm();
-    if (validationErrors.length > 0) {
-      setError(validationErrors.join(', '));
+    if (!validateForm()) {
       return;
     }
-
-    console.log('🔧 EditUserModal: Form submission started', {
-      userId: user.id,
-      formData
-    });
 
     try {
       setLoading(true);
-      setError(null);
-      
-      const startTime = performance.now();
+      setFormError(null);
       
       // Update basic user info
       await userManagementApi.updateUser(user.id, formData);
@@ -216,32 +182,15 @@ const EditUserModal = memo(function EditUserModal({
         const newRoleIds = formData.role_ids;
         
         if (JSON.stringify(currentRoleIds.sort()) !== JSON.stringify(newRoleIds.sort())) {
-          console.log('🔧 EditUserModal: Updating roles', {
-            currentRoles: currentRoleIds,
-            newRoles: newRoleIds
-          });
           await userManagementApi.assignRoles(user.id, newRoleIds);
         }
       }
       
-      const endTime = performance.now();
-      
-      console.log('🔧 EditUserModal: User updated successfully', {
-        duration: `${(endTime - startTime).toFixed(2)}ms`,
-        userId: user.id
-      });
-
       onUserUpdated();
       onClose();
       
     } catch (err: any) {
-      console.error('🔧 EditUserModal: User update failed', {
-        error: err.message,
-        status: err.response?.status,
-        data: err.response?.data
-      });
-      
-      setError(err.response?.data?.detail || 'Failed to update user');
+      setFormError(err.response?.data?.detail || 'Failed to update user');
     } finally {
       setLoading(false);
     }
@@ -271,13 +220,6 @@ const EditUserModal = memo(function EditUserModal({
       </div>
     );
   }
-
-  console.log('🔧 EditUserModal: Rendering modal', {
-    activeTab,
-    loading,
-    rolesLoading,
-    rolesCount: roles.length
-  });
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
@@ -327,9 +269,9 @@ const EditUserModal = memo(function EditUserModal({
         </div>
 
         {/* Error Display */}
-        {error && (
+        {formError && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-            <div className="text-red-800 text-sm">{error}</div>
+            <div className="text-red-800 text-sm">{formError}</div>
           </div>
         )}
 
@@ -375,9 +317,12 @@ const EditUserModal = memo(function EditUserModal({
                     type="text"
                     value={formData.full_name || ''}
                     onChange={(e) => handleFieldChange('full_name', e.target.value)}
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className={`block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                      errors.full_name ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     required
                   />
+                  {errors.full_name && <p className="text-red-500 text-xs mt-1">{errors.full_name}</p>}
                 </div>
 
                 <div>
@@ -389,9 +334,12 @@ const EditUserModal = memo(function EditUserModal({
                     type="email"
                     value={formData.email || ''}
                     onChange={(e) => handleFieldChange('email', e.target.value)}
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className={`block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                      errors.email ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     required
                   />
+                  {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                 </div>
               </div>
 
@@ -405,9 +353,12 @@ const EditUserModal = memo(function EditUserModal({
                     type="tel"
                     value={formData.phone || ''}
                     onChange={(e) => handleFieldChange('phone', e.target.value)}
-                    className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className={`block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                      errors.phone ? 'border-red-500' : 'border-gray-300'
+                    }`}
                     required
                   />
+                  {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
                 </div>
 
                 <div>
@@ -547,7 +498,7 @@ const EditUserModal = memo(function EditUserModal({
                     <div className="text-gray-500">Last Login At</div>
                     <div className="font-medium">
                       {user.last_login_at 
-                        ? new Date(user.last_login_at).toLocaleDateString()
+                        ? formatDate(user.last_login_at)
                         : 'Never'
                       }
                     </div>
@@ -555,14 +506,14 @@ const EditUserModal = memo(function EditUserModal({
                   <div>
                     <div className="text-gray-500">Created</div>
                     <div className="font-medium">
-                      {new Date(user.created_at).toLocaleDateString()}
+                      {formatDate(user.created_at)}
                     </div>
                   </div>
                   <div>
                     <div className="text-gray-500">Updated</div>
                     <div className="font-medium">
                       {user.updated_at 
-                        ? new Date(user.updated_at).toLocaleDateString()
+                        ? formatDate(user.updated_at)
                         : 'Never'
                       }
                     </div>

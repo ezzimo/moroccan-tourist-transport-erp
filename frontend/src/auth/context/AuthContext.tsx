@@ -96,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
   useEffect(() => {
+    console.log('AuthProvider useEffect called');
     const initializeAuth = async () => {
       const token = localStorage.getItem('access_token');
       const tokenExpiry = localStorage.getItem('token_expiry');
@@ -140,7 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const userData = await authApi.me();
         dispatch({ type: 'SET_USER', payload: userData as unknown as User });
       } catch (err) {
-        console.error('Failed to fetch full user data after login:', err);
+        // Handle error silently
       }
     } catch (error: any) {
       const message = error.response?.data?.detail || 'Login failed';
@@ -153,7 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await authApi.logout();
     } catch (error) {
-      console.error('Logout error:', error);
+      // Handle error silently
     } finally {
       localStorage.removeItem('access_token');
       localStorage.removeItem('token_expiry');
@@ -166,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const userData = await authApi.me();
       dispatch({ type: 'SET_USER', payload: userData });
     } catch (error) {
-      console.error('Failed to refresh user:', error);
+      // Handle error silently
     }
   };
 
@@ -178,7 +179,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error: any) {
       const message = error.response?.data?.detail || 'Failed to refresh user data';
       dispatch({ type: 'REFRESH_USER_ERROR', payload: message });
-      console.error('Failed to refresh user data:', error);
     }
   };
 
@@ -198,59 +198,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       `*:*:*`                                   // Super admin
     ];
 
-    const result = permissionVariants.some(p => state.user!.permissions.includes(p));
-
-    if (!result) {
-      console.warn('[RBAC] ⛔ Permission denied:', {
-        attempted: `${service}:${action}:${resource}`,
-        user: state.user.email,
-        available: state.user.permissions,
-      });
-    } else {
-      console.log('[RBAC] ✅ Permission granted:', `${service}:${action}:${resource}`);
-    }
-
-    return result;
+    return permissionVariants.some(p => state.user!.permissions.includes(p));
   };
-
-  // ✨ Use case in `AdminUserManagement.tsx`
-  const canRead = hasPermission('auth', 'read', 'users');
-  const canCreate = hasPermission('auth', 'create', 'users');
-  // ... etc
-
-  // ✅ This now works properly even if your DB only stores `auth:read:all` or `auth:*:*`
-  // and the call uses `hasPermission('auth', 'read', 'users')`
-
-  // const hasPermission = (resource: string, action: string, scope: string = "*"): boolean => {
-  //   if (!state.user || !state.user.permissions) {
-  //     return false;
-  //   }
-
-  //   // Check for exact permission match
-  //   const exactPermission = `${resource}:${action}:${scope}`;
-  //   if (state.user.permissions.includes(exactPermission)) {
-  //     return true;
-  //   }
-
-  //   // Check for wildcard scope permission
-  //   const wildcardPermission = `${resource}:${action}:*`;
-  //   if (state.user.permissions.includes(wildcardPermission)) {
-  //     return true;
-  //   }
-
-  //   // Check for admin permissions (full access)
-  //   const adminPermission = `${resource}:*:*`;
-  //   if (state.user.permissions.includes(adminPermission)) {
-  //     return true;
-  //   }
-
-  //   // Check for super admin (all permissions)
-  //   if (state.user.permissions.includes("*:*:*")) {
-  //     return true;
-  //   }
-
-  //   return false;
-  // };
 
   // Check if user is admin
   const isAdmin = (): boolean => {

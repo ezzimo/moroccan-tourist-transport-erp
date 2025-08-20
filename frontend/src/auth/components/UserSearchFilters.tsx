@@ -12,8 +12,6 @@ const UserSearchFilters = memo(function UserSearchFilters({
   searchParams,
   onSearchParamsChange
 }: UserSearchFiltersProps) {
-  console.log('🔧 UserSearchFilters: Component initializing', { searchParams });
-
   const [roles, setRoles] = useState<Role[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [localFilters, setLocalFilters] = useState({
@@ -35,13 +33,11 @@ const UserSearchFilters = memo(function UserSearchFilters({
   useEffect(() => {
     const loadRoles = async () => {
       try {
-        console.log('🔧 UserSearchFilters: Loading roles');
         setRolesLoading(true);
         const rolesData = await userManagementApi.getRoles();
-        console.log('🔧 UserSearchFilters: Roles loaded', { count: rolesData.length });
         setRoles(rolesData);
       } catch (error) {
-        console.error('🔧 UserSearchFilters: Error loading roles', error);
+        // Handle error
       } finally {
         setRolesLoading(false);
       }
@@ -52,14 +48,11 @@ const UserSearchFilters = memo(function UserSearchFilters({
 
   // Handle local filter changes
   const handleLocalFilterChange = useCallback((key: string, value: any) => {
-    console.log('🔧 UserSearchFilters: Local filter changed', { key, value });
     setLocalFilters(prev => ({ ...prev, [key]: value }));
   }, []);
 
   // Apply filters (debounced for search)
   const applyFilters = useCallback(() => {
-    console.log('🔧 UserSearchFilters: Applying filters', localFilters);
-    
     // Clean up empty values
     const cleanFilters: Partial<UserSearchParams> = {};
     Object.entries(localFilters).forEach(([key, value]) => {
@@ -88,7 +81,6 @@ const UserSearchFilters = memo(function UserSearchFilters({
 
   // Clear all filters
   const clearFilters = useCallback(() => {
-    console.log('🔧 UserSearchFilters: Clearing all filters');
     const clearedFilters = {
       search: '',
       role_ids: [],
@@ -109,16 +101,13 @@ const UserSearchFilters = memo(function UserSearchFilters({
 
   // Handle role selection
   const handleRoleToggle = useCallback((roleId: string) => {
-    console.log('🔧 UserSearchFilters: Role toggled', { roleId });
     const currentRoles = localFilters.role_ids || [];
     const newRoles = currentRoles.includes(roleId)
       ? currentRoles.filter(id => id !== roleId)
       : [...currentRoles, roleId];
     
     handleLocalFilterChange('role_ids', newRoles);
-    // Apply immediately for role changes
-    setTimeout(() => applyFilters(), 0);
-  }, [localFilters.role_ids, handleLocalFilterChange, applyFilters]);
+  }, [localFilters.role_ids, handleLocalFilterChange]);
 
   // Get active filter count
   const getActiveFilterCount = useCallback(() => {
@@ -137,12 +126,6 @@ const UserSearchFilters = memo(function UserSearchFilters({
   }, [localFilters]);
 
   const activeFilterCount = getActiveFilterCount();
-
-  console.log('🔧 UserSearchFilters: Rendering', {
-    activeFilterCount,
-    rolesCount: roles.length,
-    rolesLoading
-  });
 
   return (
     <div className="bg-white rounded-lg border p-6 space-y-6">
@@ -195,10 +178,7 @@ const UserSearchFilters = memo(function UserSearchFilters({
                 type="radio"
                 name="is_active"
                 checked={localFilters.is_active === undefined}
-                onChange={() => {
-                  handleLocalFilterChange('is_active', undefined);
-                  setTimeout(() => applyFilters(), 0);
-                }}
+                onChange={() => handleLocalFilterChange('is_active', undefined)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
               />
               <span className="ml-2 text-sm text-gray-700">All</span>
@@ -208,10 +188,7 @@ const UserSearchFilters = memo(function UserSearchFilters({
                 type="radio"
                 name="is_active"
                 checked={localFilters.is_active === true}
-                onChange={() => {
-                  handleLocalFilterChange('is_active', true);
-                  setTimeout(() => applyFilters(), 0);
-                }}
+                onChange={() => handleLocalFilterChange('is_active', true)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
               />
               <span className="ml-2 text-sm text-gray-700">Active</span>
@@ -221,10 +198,7 @@ const UserSearchFilters = memo(function UserSearchFilters({
                 type="radio"
                 name="is_active"
                 checked={localFilters.is_active === false}
-                onChange={() => {
-                  handleLocalFilterChange('is_active', false);
-                  setTimeout(() => applyFilters(), 0);
-                }}
+                onChange={() => handleLocalFilterChange('is_active', false)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
               />
               <span className="ml-2 text-sm text-gray-700">Inactive</span>
@@ -243,10 +217,7 @@ const UserSearchFilters = memo(function UserSearchFilters({
                 type="radio"
                 name="is_verified"
                 checked={localFilters.is_verified === undefined}
-                onChange={() => {
-                  handleLocalFilterChange('is_verified', undefined);
-                  setTimeout(() => applyFilters(), 0);
-                }}
+                onChange={() => handleLocalFilterChange('is_verified', undefined)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
               />
               <span className="ml-2 text-sm text-gray-700">All</span>
@@ -256,10 +227,7 @@ const UserSearchFilters = memo(function UserSearchFilters({
                 type="radio"
                 name="is_verified"
                 checked={localFilters.is_verified === true}
-                onChange={() => {
-                  handleLocalFilterChange('is_verified', true);
-                  setTimeout(() => applyFilters(), 0);
-                }}
+                onChange={() => handleLocalFilterChange('is_verified', true)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
               />
               <span className="ml-2 text-sm text-gray-700">Verified</span>
@@ -269,10 +237,7 @@ const UserSearchFilters = memo(function UserSearchFilters({
                 type="radio"
                 name="is_verified"
                 checked={localFilters.is_verified === false}
-                onChange={() => {
-                  handleLocalFilterChange('is_verified', false);
-                  setTimeout(() => applyFilters(), 0);
-                }}
+                onChange={() => handleLocalFilterChange('is_verified', false)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
               />
               <span className="ml-2 text-sm text-gray-700">Unverified</span>
@@ -291,10 +256,7 @@ const UserSearchFilters = memo(function UserSearchFilters({
                 type="radio"
                 name="is_locked"
                 checked={localFilters.is_locked === undefined}
-                onChange={() => {
-                  handleLocalFilterChange('is_locked', undefined);
-                  setTimeout(() => applyFilters(), 0);
-                }}
+                onChange={() => handleLocalFilterChange('is_locked', undefined)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
               />
               <span className="ml-2 text-sm text-gray-700">All</span>
@@ -304,10 +266,7 @@ const UserSearchFilters = memo(function UserSearchFilters({
                 type="radio"
                 name="is_locked"
                 checked={localFilters.is_locked === false}
-                onChange={() => {
-                  handleLocalFilterChange('is_locked', false);
-                  setTimeout(() => applyFilters(), 0);
-                }}
+                onChange={() => handleLocalFilterChange('is_locked', false)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
               />
               <span className="ml-2 text-sm text-gray-700">Unlocked</span>
@@ -317,10 +276,7 @@ const UserSearchFilters = memo(function UserSearchFilters({
                 type="radio"
                 name="is_locked"
                 checked={localFilters.is_locked === true}
-                onChange={() => {
-                  handleLocalFilterChange('is_locked', true);
-                  setTimeout(() => applyFilters(), 0);
-                }}
+                onChange={() => handleLocalFilterChange('is_locked', true)}
                 className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
               />
               <span className="ml-2 text-sm text-gray-700">Locked</span>
@@ -369,20 +325,14 @@ const UserSearchFilters = memo(function UserSearchFilters({
               type="date"
               placeholder="From"
               value={localFilters.created_after}
-              onChange={(e) => {
-                handleLocalFilterChange('created_after', e.target.value);
-                setTimeout(() => applyFilters(), 0);
-              }}
+              onChange={(e) => handleLocalFilterChange('created_after', e.target.value)}
               className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
             <input
               type="date"
               placeholder="To"
               value={localFilters.created_before}
-              onChange={(e) => {
-                handleLocalFilterChange('created_before', e.target.value);
-                setTimeout(() => applyFilters(), 0);
-              }}
+              onChange={(e) => handleLocalFilterChange('created_before', e.target.value)}
               className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -399,20 +349,14 @@ const UserSearchFilters = memo(function UserSearchFilters({
               type="date"
               placeholder="From"
               value={localFilters.last_login_after}
-              onChange={(e) => {
-                handleLocalFilterChange('last_login_after', e.target.value);
-                setTimeout(() => applyFilters(), 0);
-              }}
+              onChange={(e) => handleLocalFilterChange('last_login_after', e.target.value)}
               className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
             <input
               type="date"
               placeholder="To"
               value={localFilters.last_login_before}
-              onChange={(e) => {
-                handleLocalFilterChange('last_login_before', e.target.value);
-                setTimeout(() => applyFilters(), 0);
-              }}
+              onChange={(e) => handleLocalFilterChange('last_login_before', e.target.value)}
               className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
@@ -428,10 +372,7 @@ const UserSearchFilters = memo(function UserSearchFilters({
           </label>
           <select
             value={localFilters.sort_by}
-            onChange={(e) => {
-              handleLocalFilterChange('sort_by', e.target.value);
-              setTimeout(() => applyFilters(), 0);
-            }}
+            onChange={(e) => handleLocalFilterChange('sort_by', e.target.value)}
             className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="created_at">Created Date</option>
@@ -449,10 +390,7 @@ const UserSearchFilters = memo(function UserSearchFilters({
           </label>
           <select
             value={localFilters.sort_order}
-            onChange={(e) => {
-              handleLocalFilterChange('sort_order', e.target.value as 'asc' | 'desc');
-              setTimeout(() => applyFilters(), 0);
-            }}
+            onChange={(e) => handleLocalFilterChange('sort_order', e.target.value as 'asc' | 'desc')}
             className="block w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="desc">Newest First</option>
@@ -469,15 +407,20 @@ const UserSearchFilters = memo(function UserSearchFilters({
             <input
               type="checkbox"
               checked={localFilters.include_deleted}
-              onChange={(e) => {
-                handleLocalFilterChange('include_deleted', e.target.checked);
-                setTimeout(() => applyFilters(), 0);
-              }}
+              onChange={(e) => handleLocalFilterChange('include_deleted', e.target.checked)}
               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
             />
             <span className="ml-2 text-sm text-gray-700">Include deleted users</span>
           </label>
         </div>
+      </div>
+      <div className="flex justify-end pt-4 border-t">
+        <button
+          onClick={applyFilters}
+          className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+        >
+          Apply Filters
+        </button>
       </div>
     </div>
   );
