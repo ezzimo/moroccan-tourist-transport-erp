@@ -69,11 +69,11 @@ const UserActivityModal = memo(function UserActivityModal({
   const getActivityIcon = useCallback((action: string) => {
     switch (action) {
       case ACTIVITY_ACTIONS.USER_CREATED:
-        return { icon: User, color: 'text-green-600' };
+        return { icon: UserIcon, color: 'text-green-600' };
       case ACTIVITY_ACTIONS.USER_UPDATED:
-        return { icon: User, color: 'text-blue-600' };
+        return { icon: UserIcon, color: 'text-blue-600' };
       case ACTIVITY_ACTIONS.USER_DELETED:
-        return { icon: User, color: 'text-red-600' };
+        return { icon: UserIcon, color: 'text-red-600' };
       case ACTIVITY_ACTIONS.USER_LOCKED:
         return { icon: Shield, color: 'text-red-600' };
       case ACTIVITY_ACTIONS.USER_UNLOCKED:
@@ -83,7 +83,7 @@ const UserActivityModal = memo(function UserActivityModal({
       case ACTIVITY_ACTIONS.ROLE_ASSIGNED:
         return { icon: Shield, color: 'text-purple-600' };
       case ACTIVITY_ACTIONS.BULK_UPDATE:
-        return { icon: User, color: 'text-blue-600' };
+        return { icon: UserIcon, color: 'text-blue-600' };
       default:
         return { icon: Activity, color: 'text-gray-600' };
     }
