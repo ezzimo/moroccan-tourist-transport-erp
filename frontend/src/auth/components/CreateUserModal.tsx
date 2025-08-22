@@ -15,11 +15,10 @@ const CreateUserModal = memo(function CreateUserModal({
   onClose,
   onUserCreated
 }: CreateUserModalProps) {
-  console.log('🔧 CreateUserModal: Component initializing', { isOpen });
-
   const { hasPermission } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Partial<Record<keyof UserCreateRequest, string>>>({});
   const [showPassword, setShowPassword] = useState(false);
   const [roles, setRoles] = useState<Role[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
@@ -38,20 +37,16 @@ const CreateUserModal = memo(function CreateUserModal({
   // Permission check
   const canCreate = hasPermission('auth', 'create', 'users');
 
-  console.log('🔧 CreateUserModal: Permissions', { canCreate });
-
   // Load roles when modal opens
   useEffect(() => {
     if (isOpen) {
       const loadRoles = async () => {
         try {
-          console.log('🔧 CreateUserModal: Loading roles');
           setRolesLoading(true);
           const rolesData = await userManagementApi.getRoles();
-          console.log('🔧 CreateUserModal: Roles loaded', { count: rolesData.length });
           setRoles(rolesData);
         } catch (error) {
-          console.error('🔧 CreateUserModal: Error loading roles', error);
+          // In a real app, you'd want to handle this error more gracefully
         } finally {
           setRolesLoading(false);
         }
@@ -64,7 +59,6 @@ const CreateUserModal = memo(function CreateUserModal({
   // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
-      console.log('🔧 CreateUserModal: Resetting form');
       setFormData({
         full_name: '',
         email: '',
@@ -75,21 +69,21 @@ const CreateUserModal = memo(function CreateUserModal({
         must_change_password: true,
         avatar_url: ''
       });
-      setError(null);
+      setFormError(null);
+      setErrors({});
       setShowPassword(false);
     }
   }, [isOpen]);
 
   // Handle form field changes
   const handleFieldChange = useCallback((field: keyof UserCreateRequest, value: any) => {
-    console.log('🔧 CreateUserModal: Field changed', { field, value });
     setFormData(prev => ({ ...prev, [field]: value }));
-    setError(null); // Clear error when user makes changes
+    setErrors(prev => ({ ...prev, [field]: undefined }));
+    setFormError(null); // Clear main form error
   }, []);
 
   // Handle role selection
   const handleRoleToggle = useCallback((roleId: string) => {
-    console.log('🔧 CreateUserModal: Role toggled', { roleId });
     setFormData(prev => ({
       ...prev,
       role_ids: prev.role_ids?.includes(roleId)
@@ -102,41 +96,36 @@ const CreateUserModal = memo(function CreateUserModal({
   const generatePassword = useCallback(() => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
     const password = Array.from({ length: 12 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-    console.log('🔧 CreateUserModal: Password generated');
     handleFieldChange('password', password);
     setShowPassword(true);
   }, [handleFieldChange]);
 
   // Validate form
   const validateForm = useCallback(() => {
-    const errors: string[] = [];
+    const newErrors: Partial<Record<keyof UserCreateRequest, string>> = {};
 
     if (!formData.full_name.trim()) {
-      errors.push('Full name is required');
+      newErrors.full_name = 'Full name is required';
     }
 
     if (!formData.email.trim()) {
-      errors.push('Email is required');
+      newErrors.email = 'Email is required';
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      errors.push('Please enter a valid email address');
+      newErrors.email = 'Please enter a valid email address';
     }
 
     if (!formData.phone.trim()) {
-      errors.push('Phone number is required');
+      newErrors.phone = 'Phone number is required';
     }
 
     if (!formData.password.trim()) {
-      errors.push('Password is required');
+      newErrors.password = 'Password is required';
     } else if (formData.password.length < 8) {
-      errors.push('Password must be at least 8 characters long');
+      newErrors.password = 'Password must be at least 8 characters long';
     }
 
-    console.log('🔧 CreateUserModal: Form validation', {
-      isValid: errors.length === 0,
-      errors
-    });
-
-    return errors;
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   }, [formData]);
 
   // Handle form submission
@@ -144,49 +133,25 @@ const CreateUserModal = memo(function CreateUserModal({
     e.preventDefault();
     
     if (!canCreate) {
-      console.warn('🔧 CreateUserModal: No create permission');
-      setError('You do not have permission to create users');
+      setFormError('You do not have permission to create users');
       return;
     }
 
-    const validationErrors = validateForm();
-    if (validationErrors.length > 0) {
-      setError(validationErrors.join(', '));
+    if (!validateForm()) {
       return;
     }
-
-    console.log('🔧 CreateUserModal: Form submission started', {
-      formData: {
-        ...formData,
-        password: '[REDACTED]'
-      }
-    });
 
     try {
       setLoading(true);
-      setError(null);
+      setFormError(null);
       
-      const startTime = performance.now();
-      const newUser = await userManagementApi.createUser(formData);
-      const endTime = performance.now();
-      
-      console.log('🔧 CreateUserModal: User created successfully', {
-        duration: `${(endTime - startTime).toFixed(2)}ms`,
-        userId: newUser.id,
-        userEmail: newUser.email
-      });
+      await userManagementApi.createUser(formData);
 
       onUserCreated();
       onClose();
       
     } catch (err: any) {
-      console.error('🔧 CreateUserModal: User creation failed', {
-        error: err.message,
-        status: err.response?.status,
-        data: err.response?.data
-      });
-      
-      setError(err.response?.data?.detail || 'Failed to create user');
+      setFormError(err.response?.data?.detail || 'Failed to create user');
     } finally {
       setLoading(false);
     }
@@ -217,13 +182,6 @@ const CreateUserModal = memo(function CreateUserModal({
     );
   }
 
-  console.log('🔧 CreateUserModal: Rendering modal', {
-    loading,
-    rolesLoading,
-    rolesCount: roles.length,
-    selectedRolesCount: formData.role_ids?.length || 0
-  });
-
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
       <div className="relative top-10 mx-auto p-5 border w-full max-w-2xl shadow-lg rounded-md bg-white">
@@ -242,9 +200,9 @@ const CreateUserModal = memo(function CreateUserModal({
         </div>
 
         {/* Error Display */}
-        {error && (
+        {formError && (
           <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-md">
-            <div className="text-red-800 text-sm">{error}</div>
+            <div className="text-red-800 text-sm">{formError}</div>
           </div>
         )}
 
@@ -261,10 +219,13 @@ const CreateUserModal = memo(function CreateUserModal({
                 type="text"
                 value={formData.full_name}
                 onChange={(e) => handleFieldChange('full_name', e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className={`block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                  errors.full_name ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="Enter full name"
                 required
               />
+              {errors.full_name && <p className="text-red-500 text-xs mt-1">{errors.full_name}</p>}
             </div>
 
             <div>
@@ -276,10 +237,13 @@ const CreateUserModal = memo(function CreateUserModal({
                 type="email"
                 value={formData.email}
                 onChange={(e) => handleFieldChange('email', e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className={`block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                  errors.email ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="Enter email address"
                 required
               />
+              {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
             </div>
           </div>
 
@@ -293,10 +257,13 @@ const CreateUserModal = memo(function CreateUserModal({
                 type="tel"
                 value={formData.phone}
                 onChange={(e) => handleFieldChange('phone', e.target.value)}
-                className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className={`block w-full px-3 py-2 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                  errors.phone ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="Enter phone number"
                 required
               />
+              {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
             </div>
 
             <div>
@@ -324,7 +291,9 @@ const CreateUserModal = memo(function CreateUserModal({
                 type={showPassword ? 'text' : 'password'}
                 value={formData.password}
                 onChange={(e) => handleFieldChange('password', e.target.value)}
-                className="block w-full px-3 py-2 pr-20 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                className={`block w-full px-3 py-2 pr-20 border rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                  errors.password ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="Enter password"
                 required
               />
@@ -342,12 +311,13 @@ const CreateUserModal = memo(function CreateUserModal({
                   className="text-blue-400 hover:text-blue-600 text-xs"
                   title="Generate Password"
                 >
-                  Gen
+                  Generate
                 </button>
               </div>
             </div>
+            {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
             <p className="mt-1 text-xs text-gray-500">
-              Minimum 8 characters. Click "Gen" to generate a secure password.
+              Minimum 8 characters. Click "Generate" to create a secure password.
             </p>
           </div>
 

@@ -15,6 +15,7 @@ import EditUserModal from './EditUserModal';
 import UserActivityModal from './UserActivityModal';
 import BulkActionsToolbar from './BulkActionsToolbar';
 import PermissionGate from './PermissionGate';
+import ConfirmationModal from './ConfirmationModal';
 
 
 interface AdminUserManagementProps {
@@ -22,8 +23,6 @@ interface AdminUserManagementProps {
 }
 
 export default function AdminUserManagement({ className = '' }: AdminUserManagementProps) {
-  console.log('🔧 AdminUserManagement: Component initializing');
-  
   const { hasPermission, isAdmin, state: authState } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [searchResponse, setSearchResponse] = useState<UserSearchResponse | null>(null);
@@ -36,7 +35,9 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
   const [showEditModal, setShowEditModal] = useState(false);
   const [showActivityModal, setShowActivityModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [activityUserId, setActivityUserId] = useState<string | null>(null);
+  const [activityUser, setActivityUser] = useState<User | null>(null);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
   
   // Search and filter states
   const [searchParams, setSearchParams] = useState<UserSearchParams>({
@@ -47,17 +48,6 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
   });
   const [showFilters, setShowFilters] = useState(false);
 
-  console.log('🔧 AdminUserManagement: Current state', {
-    usersCount: users.length,
-    loading,
-    error,
-    selectedUsersCount: selectedUsers.length,
-    searchParams,
-    hasReadPermission: hasPermission('auth', 'read', 'users'),
-    isAdmin,
-    currentUser: authState.user?.email
-  });
-
   // Check permissions
   const canRead = hasPermission('auth', 'read', 'users');
   const canCreate = hasPermission('auth', 'create', 'users');
@@ -66,22 +56,9 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
   const canBulkOperations = hasPermission('auth', 'bulk', 'users');
   const canImportExport = hasPermission('auth', 'import_export', 'users');
 
-  console.log('🔧 AdminUserManagement: Permissions check', {
-    canRead,
-    canCreate,
-    canUpdate,
-    canDelete,
-    canBulkOperations,
-    canImportExport,
-    isAdmin
-  });
-
   // Load users function with maximum logging
   const loadUsers = useCallback(async (params: UserSearchParams = searchParams) => {
-    console.log('🔧 AdminUserManagement: loadUsers called', { params });
-    
     if (!canRead) {
-      console.warn('🔧 AdminUserManagement: No read permission, skipping load');
       setError('You do not have permission to view users');
       setLoading(false);
       return;
@@ -91,63 +68,27 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
       setLoading(true);
       setError(null);
       
-      console.log('🔧 AdminUserManagement: Making API call to search users');
-      const startTime = performance.now();
-      
       const response = await userManagementApi.searchUsers(params);
       
-      const endTime = performance.now();
-      console.log('🔧 AdminUserManagement: API call completed', {
-        duration: `${(endTime - startTime).toFixed(2)}ms`,
-        usersReturned: response.users.length,
-        total: response.total,
-        hasMore: response.has_more
-      });
-
       setUsers(response.users);
       setSearchResponse(response);
       
-      console.log('🔧 AdminUserManagement: Users loaded successfully', {
-        users: response.users.map(u => ({
-          id: u.id,
-          email: u.email,
-          full_name: u.full_name,
-          is_active: u.is_active,
-          is_locked: u.is_locked,
-          roles: u.roles.map(r => r.name)
-        }))
-      });
-
     } catch (err: any) {
-      console.error('🔧 AdminUserManagement: Error loading users', {
-        error: err.message,
-        status: err.response?.status,
-        data: err.response?.data
-      });
-      
       setError(err.response?.data?.detail || 'Failed to load users');
       setUsers([]);
       setSearchResponse(null);
     } finally {
       setLoading(false);
-      console.log('🔧 AdminUserManagement: loadUsers completed');
     }
   }, [searchParams, canRead]);
 
   // Initial load
   useEffect(() => {
-    console.log('🔧 AdminUserManagement: useEffect triggered for initial load');
     loadUsers();
   }, [loadUsers]);
 
   // Handle search parameter changes
   const handleSearchParamsChange = useCallback((newParams: Partial<UserSearchParams>) => {
-    console.log('🔧 AdminUserManagement: Search params changing', {
-      oldParams: searchParams,
-      newParams,
-      mergedParams: { ...searchParams, ...newParams, skip: 0 }
-    });
-    
     const updatedParams = { ...searchParams, ...newParams, skip: 0 };
     setSearchParams(updatedParams);
     setSelectedUsers([]); // Clear selection when search changes
@@ -157,12 +98,6 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
   // Handle pagination
   const handlePageChange = useCallback((page: number) => {
     const skip = page * searchParams.limit!;
-    console.log('🔧 AdminUserManagement: Page changing', {
-      page,
-      limit: searchParams.limit,
-      skip,
-      currentSkip: searchParams.skip
-    });
     
     const updatedParams = { ...searchParams, skip };
     setSearchParams(updatedParams);
@@ -171,24 +106,12 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
 
   // Handle user selection
   const handleUserSelection = useCallback((userIds: string[]) => {
-    console.log('🔧 AdminUserManagement: User selection changed', {
-      previousSelection: selectedUsers,
-      newSelection: userIds,
-      selectionCount: userIds.length
-    });
     setSelectedUsers(userIds);
-  }, [selectedUsers]);
+  }, []);
 
   // Handle user actions
   const handleEditUser = useCallback((user: User) => {
-    console.log('🔧 AdminUserManagement: Edit user requested', {
-      userId: user.id,
-      userEmail: user.email,
-      canUpdate
-    });
-    
     if (!canUpdate) {
-      console.warn('🔧 AdminUserManagement: No update permission for edit');
       setError('You do not have permission to edit users');
       return;
     }
@@ -197,84 +120,59 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
     setShowEditModal(true);
   }, [canUpdate]);
 
-  const handleViewActivity = useCallback((userId: string) => {
-    console.log('🔧 AdminUserManagement: View activity requested', {
-      userId,
-      hasPermission: hasPermission('auth', 'read', 'activity')
-    });
-    
-    setActivityUserId(userId);
+  const handleViewActivity = useCallback((user: User) => {
+    setActivityUser(user);
     setShowActivityModal(true);
-  }, [hasPermission]);
+  }, []);
 
   const handleDeleteUser = useCallback(async (userId: string) => {
-    console.log('🔧 AdminUserManagement: Delete user requested', {
-      userId,
-      canDelete
-    });
-    
     if (!canDelete) {
-      console.warn('🔧 AdminUserManagement: No delete permission');
       setError('You do not have permission to delete users');
       return;
     }
+    setDeletingUserId(userId);
+    setShowDeleteConfirmation(true);
+  }, [canDelete]);
 
-    if (!confirm('Are you sure you want to delete this user?')) {
-      console.log('🔧 AdminUserManagement: Delete cancelled by user');
-      return;
-    }
+  const confirmDeleteUser = useCallback(async () => {
+    if (!deletingUserId) return;
 
     try {
-      console.log('🔧 AdminUserManagement: Deleting user via API');
-      await userManagementApi.deleteUser(userId);
-      console.log('🔧 AdminUserManagement: User deleted successfully');
+      setLoading(true); // You might want a specific loading state for deletion
+      await userManagementApi.deleteUser(deletingUserId);
       
       // Reload users
       await loadUsers();
       
       // Remove from selection if selected
-      setSelectedUsers(prev => prev.filter(id => id !== userId));
+      setSelectedUsers(prev => prev.filter(id => id !== deletingUserId));
       
     } catch (err: any) {
-      console.error('🔧 AdminUserManagement: Error deleting user', {
-        error: err.message,
-        userId
-      });
       setError(err.response?.data?.detail || 'Failed to delete user');
+    } finally {
+      setShowDeleteConfirmation(false);
+      setDeletingUserId(null);
+      setLoading(false);
     }
-  }, [canDelete, loadUsers]);
+  }, [deletingUserId, loadUsers]);
 
   // Handle export
   const handleExport = useCallback(async (format: 'csv' | 'json') => {
-    console.log('🔧 AdminUserManagement: Export requested', {
-      format,
-      // canImportExport,
-      usersCount: users.length
-    });
-    
     // if (!canImportExport) {
-    //   console.warn('🔧 AdminUserManagement: No import/export permission');
     //   setError('You do not have permission to export users');
     //   return;
     // }
 
     try {
-      console.log('🔧 AdminUserManagement: Starting export');
       await userManagementApi.downloadExport(format);
-      console.log('🔧 AdminUserManagement: Export completed successfully');
     } catch (err: any) {
-      console.error('🔧 AdminUserManagement: Export failed', {
-        error: err.message,
-        format
-      });
       setError(err.response?.data?.detail || 'Failed to export users');
     }
-  }, [users.length]);
+  }, []);
   // [canImportExport, users.length]);
 
   // Handle refresh
   const handleRefresh = useCallback(() => {
-    console.log('🔧 AdminUserManagement: Manual refresh requested');
     loadUsers();
   }, [loadUsers]);
 
@@ -468,14 +366,26 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
         />
       )}
 
-      {showActivityModal && activityUserId && (
+      {showActivityModal && activityUser && (
         <UserActivityModal
           isOpen={showActivityModal}
-          userId={activityUserId}
+          user={activityUser}
           onClose={() => {
             setShowActivityModal(false);
-            setActivityUserId(null);
+            setActivityUser(null);
           }}
+        />
+      )}
+
+      {showDeleteConfirmation && (
+        <ConfirmationModal
+          isOpen={showDeleteConfirmation}
+          onClose={() => setShowDeleteConfirmation(false)}
+          onConfirm={confirmDeleteUser}
+          title="Delete User"
+          message={`Are you sure you want to delete this user? This action cannot be undone.`}
+          confirmText="Delete"
+          loading={loading}
         />
       )}
     </div>

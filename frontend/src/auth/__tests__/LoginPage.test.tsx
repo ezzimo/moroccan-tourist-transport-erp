@@ -97,7 +97,7 @@ describe('LoginPage', () => {
   })
 
   it('displays error message on login failure', async () => {
-    vi.mocked(authApi.login).mockRejectedValue(new Error('Invalid credentials'))
+    vi.mocked(authApi.login).mockRejectedValue({ response: { data: { detail: 'Invalid credentials' } } })
 
     render(
       <TestWrapper>
@@ -114,8 +114,7 @@ describe('LoginPage', () => {
     fireEvent.click(submitButton)
 
     await waitFor(() => {
-      // Check for error message in the UI - this might be displayed differently
-      expect(screen.getByText(/invalid credentials/i) || screen.getByText(/login failed/i)).toBeInTheDocument()
+      expect(screen.getByText(/invalid credentials/i)).toBeInTheDocument()
     })
   })
 
@@ -129,10 +128,10 @@ describe('LoginPage', () => {
     const submitButton = screen.getByRole('button', { name: /sign in/i })
     fireEvent.click(submitButton)
 
-    await waitFor(() => {
-      expect(screen.getByText(/email is required/i)).toBeInTheDocument()
-      expect(screen.getByText(/password is required/i)).toBeInTheDocument()
-    })
+    await new Promise(r => setTimeout(r, 100));
+
+    expect(await screen.findByTestId('email-error')).toHaveTextContent('Email is required')
+    expect(await screen.findByTestId('password-error')).toHaveTextContent('Password is required')
   })
 })
 

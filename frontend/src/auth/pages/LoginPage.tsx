@@ -11,6 +11,7 @@ export default function LoginPage() {
     email: '',
     password: '',
   });
+  const [errors, setErrors] = useState<Partial<LoginCredentials>>({});
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -20,14 +21,29 @@ export default function LoginPage() {
     return <Navigate to={from} replace />;
   }
 
+  const validate = () => {
+    const newErrors: Partial<LoginCredentials> = {};
+    if (!credentials.email) {
+      newErrors.email = 'Email is required';
+    }
+    if (!credentials.password) {
+      newErrors.password = 'Password is required';
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!validate()) {
+      return;
+    }
     setIsSubmitting(true);
 
     try {
       await login(credentials);
     } catch (error) {
-      console.error('Login failed:', error);
+      // Error is handled in the AuthContext and displayed via state.error
     } finally {
       setIsSubmitting(false);
     }
@@ -37,6 +53,10 @@ export default function LoginPage() {
     setCredentials(prev => ({
       ...prev,
       [e.target.name]: e.target.value,
+    }));
+    setErrors(prev => ({
+      ...prev,
+      [e.target.name]: undefined,
     }));
   };
 
@@ -71,9 +91,12 @@ export default function LoginPage() {
                 required
                 value={credentials.email}
                 onChange={handleChange}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
+                  errors.email ? 'border-red-500' : 'border-gray-300'
+                }`}
                 placeholder="Enter your email"
               />
+              {errors.email && <p data-testid="email-error" className="text-red-500 text-xs mt-1">{errors.email}</p>}
             </div>
 
             <div>
@@ -89,7 +112,9 @@ export default function LoginPage() {
                   required
                   value={credentials.password}
                   onChange={handleChange}
-                  className="w-full px-4 py-3 pr-12 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors"
+                  className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-colors ${
+                    errors.password ? 'border-red-500' : 'border-gray-300'
+                  }`}
                   placeholder="Enter your password"
                 />
                 <button
@@ -104,6 +129,7 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
+              {errors.password && <p data-testid="password-error" className="text-red-500 text-xs mt-1">{errors.password}</p>}
             </div>
 
             <button

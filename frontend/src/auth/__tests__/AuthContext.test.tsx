@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
+import { render, screen, act, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '../context/AuthContext'
 import { authApi } from '../api/authApi'
@@ -15,7 +15,6 @@ vi.mock('../api/authApi', () => ({
 
 const TestComponent = () => {
   const { user, isAuthenticated, login, logout, isLoading } = useAuth()
-  
   return (
     <div>
       <div data-testid="auth-status">
@@ -31,23 +30,6 @@ const TestComponent = () => {
   )
 }
 
-const TestWrapper = ({ children }: { children: React.ReactNode }) => {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  })
-
-  return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        {children}
-      </AuthProvider>
-    </QueryClientProvider>
-  )
-}
-
 describe('AuthContext', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -56,9 +38,9 @@ describe('AuthContext', () => {
 
   it('provides initial unauthenticated state', () => {
     render(
-      <TestWrapper>
+      <AuthProvider>
         <TestComponent />
-      </TestWrapper>
+      </AuthProvider>
     )
 
     expect(screen.getByTestId('auth-status')).toHaveTextContent('not-authenticated')
@@ -80,9 +62,9 @@ describe('AuthContext', () => {
     vi.mocked(authApi.login).mockResolvedValue(mockLoginResponse)
 
     render(
-      <TestWrapper>
+      <AuthProvider>
         <TestComponent />
-      </TestWrapper>
+      </AuthProvider>
     )
 
     const loginButton = screen.getByText('Login')
@@ -109,9 +91,9 @@ describe('AuthContext', () => {
     vi.mocked(authApi.logout).mockResolvedValue(undefined)
 
     render(
-      <TestWrapper>
+      <AuthProvider>
         <TestComponent />
-      </TestWrapper>
+      </AuthProvider>
     )
 
     const logoutButton = screen.getByText('Logout')
@@ -123,25 +105,31 @@ describe('AuthContext', () => {
     expect(authApi.logout).toHaveBeenCalled()
   })
 
-  it('restores authentication state from localStorage', () => {
+  it('restores authentication state from localStorage', async () => {
     const mockUser = {
       id: '1',
       email: 'test@example.com',
       full_name: 'Test User',
       is_active: true,
-    }
+      permissions: [],
+      roles: [],
+    };
 
-    localStorage.setItem('token', 'mock-token')
-    localStorage.setItem('user', JSON.stringify(mockUser))
+    localStorage.setItem('access_token', 'mock-token');
+    localStorage.setItem('token_expiry', (Date.now() + 1000 * 60 * 60).toString());
+
+    vi.mocked(authApi.me).mockResolvedValue(mockUser);
 
     render(
-      <TestWrapper>
+      <AuthProvider>
         <TestComponent />
-      </TestWrapper>
-    )
+      </AuthProvider>
+    );
 
-    expect(screen.getByTestId('auth-status')).toHaveTextContent('authenticated')
-    expect(screen.getByTestId('user-email')).toHaveTextContent('test@example.com')
-  })
+    await waitFor(() => {
+      expect(screen.getByTestId('auth-status')).toHaveTextContent('authenticated');
+      expect(screen.getByTestId('user-email')).toHaveTextContent('test@example.com');
+    });
+  });
 })
 
