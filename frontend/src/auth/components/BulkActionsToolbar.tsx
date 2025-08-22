@@ -23,7 +23,7 @@ const BulkActionsToolbar = memo(function BulkActionsToolbar({
   onActionComplete
 }: BulkActionsToolbarProps) {
   console.log('🔧 BulkActionsToolbar: Component initializing', {
-    selectedCount: selectedUserIds.length
+    selectedCount: (selectedUserIds || []).length
   });
 
   const { hasPermission } = useAuth();
@@ -38,7 +38,7 @@ const BulkActionsToolbar = memo(function BulkActionsToolbar({
   console.log('🔧 BulkActionsToolbar: Permissions', {
     canBulkUpdate,
     canDelete,
-    selectedCount: selectedUserIds.length
+    selectedCount: (selectedUserIds || []).length
   });
 
   // Handle bulk status update
@@ -94,7 +94,7 @@ const BulkActionsToolbar = memo(function BulkActionsToolbar({
       return;
     }
 
-    const confirmMessage = `Are you sure you want to delete ${selectedUserIds.length} user(s)? This action cannot be undone.`;
+    const confirmMessage = `Are you sure you want to delete ${(selectedUserIds || []).length} user(s)? This action cannot be undone.`;
     if (!confirm(confirmMessage)) {
       console.log('🔧 BulkActionsToolbar: Bulk delete cancelled by user');
       return;
@@ -120,7 +120,7 @@ const BulkActionsToolbar = memo(function BulkActionsToolbar({
       const endTime = performance.now();
       console.log('🔧 BulkActionsToolbar: Bulk delete completed', {
         duration: `${(endTime - startTime).toFixed(2)}ms`,
-        deletedCount: selectedUserIds.length
+        deletedCount: (selectedUserIds || []).length
       });
 
       onActionComplete();
@@ -208,13 +208,13 @@ const BulkActionsToolbar = memo(function BulkActionsToolbar({
 
   const availableActions = (bulkActions || []).filter(action => action.requiresPermission);
 
-  if (selectedUserIds.length === 0 || availableActions.length === 0) {
+  if ((selectedUserIds || []).length === 0 || (availableActions || []).length === 0) {
     return null;
   }
 
   console.log('🔧 BulkActionsToolbar: Rendering toolbar', {
-    selectedCount: selectedUserIds.length,
-    availableActionsCount: availableActions.length,
+    selectedCount: (selectedUserIds || []).length,
+    availableActionsCount: (availableActions || []).length,
     loading,
     showDropdown
   });
@@ -224,7 +224,7 @@ const BulkActionsToolbar = memo(function BulkActionsToolbar({
       {/* Selected count */}
       <div className="flex items-center text-sm text-gray-600">
         <Users className="h-4 w-4 mr-1" />
-        <span className="font-medium">{selectedUserIds.length}</span>
+        <span className="font-medium">{(selectedUserIds || []).length}</span>
         <span className="ml-1">selected</span>
       </div>
 
@@ -260,7 +260,7 @@ const BulkActionsToolbar = memo(function BulkActionsToolbar({
                     onClick={() => {
                       console.log('🔧 BulkActionsToolbar: Action triggered', {
                         actionId: action.id,
-                        selectedCount: selectedUserIds.length
+                        selectedCount: (selectedUserIds || []).length
                       });
                       action.action();
                     }}

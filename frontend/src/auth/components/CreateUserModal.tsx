@@ -118,9 +118,9 @@ const CreateUserModal = memo(function CreateUserModal({
       newErrors.phone = 'Phone number is required';
     }
 
-    if (!formData.password.trim()) {
+    if (!formData.password?.trim()) {
       newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
+    } else if ((formData.password || '').length < 8) {
       newErrors.password = 'Password must be at least 8 characters long';
     }
 

@@ -290,7 +290,7 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
             </button>
           </div>
           
-          {selectedUsers.length > 0  && (
+          {(selectedUsers || []).length > 0  && (
             <BulkActionsToolbar
               selectedUserIds={selectedUsers}
               onActionComplete={() => {

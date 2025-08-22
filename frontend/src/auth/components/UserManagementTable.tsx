@@ -104,12 +104,12 @@ const UserManagementTable = memo(function UserManagementTable({
 
   // Get user roles display
   const getUserRoles = useCallback((user: User) => {
-    if (!user.roles || user.roles.length === 0) {
+    if (!user.roles || (user.roles || []).length === 0) {
       return <span className="text-gray-400">No roles</span>;
     }
     
-    const displayRoles = user.roles.slice(0, 2);
-    const remainingCount = user.roles.length - 2;
+    const displayRoles = (user.roles || []).slice(0, 2);
+    const remainingCount = (user.roles || []).length - 2;
     
     return (
       <div className="flex flex-wrap gap-1">
@@ -142,7 +142,7 @@ const UserManagementTable = memo(function UserManagementTable({
     );
   }
 
-  if (users.length === 0) {
+  if ((users || []).length === 0) {
     return (
       <div className="bg-white rounded-lg border">
         <div className="p-8 text-center">
@@ -156,8 +156,8 @@ const UserManagementTable = memo(function UserManagementTable({
     );
   }
 
-  const isAllSelected = users.length > 0 && users.every(user => selectedUserIds.includes(user.id));
-  const isPartiallySelected = selectedUserIds.length > 0 && !isAllSelected;
+  const isAllSelected = (users || []).length > 0 && (users || []).every(user => (selectedUserIds || []).includes(user.id));
+  const isPartiallySelected = (selectedUserIds || []).length > 0 && !isAllSelected;
 
   return (
     <div className="bg-white rounded-lg border overflow-hidden">
