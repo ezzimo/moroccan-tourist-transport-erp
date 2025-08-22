@@ -87,7 +87,7 @@ const CreateUserModal = memo(function CreateUserModal({
     setFormData(prev => ({
       ...prev,
       role_ids: prev.role_ids?.includes(roleId)
-        ? prev.role_ids.filter(id => id !== roleId)
+        ? (prev.role_ids || []).filter(id => id !== roleId)
         : [...(prev.role_ids || []), roleId]
     }));
   }, []);

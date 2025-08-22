@@ -255,19 +255,19 @@ export default function AdminUserManagement({ className = '' }: AdminUserManagem
             </div>
             <div className="bg-green-50 rounded-lg p-4">
               <div className="text-2xl font-bold text-green-600">
-                {users.filter(u => u.is_active).length}
+                {(users || []).filter(u => u.is_active).length}
               </div>
               <div className="text-sm text-green-600">Active Users</div>
             </div>
             <div className="bg-yellow-50 rounded-lg p-4">
               <div className="text-2xl font-bold text-yellow-600">
-                {users.filter(u => u.is_locked).length}
+                {(users || []).filter(u => u.is_locked).length}
               </div>
               <div className="text-sm text-yellow-600">Locked Users</div>
             </div>
             <div className="bg-purple-50 rounded-lg p-4">
               <div className="text-2xl font-bold text-purple-600">
-                {users.filter(u => !u.is_verified).length}
+                {(users || []).filter(u => !u.is_verified).length}
               </div>
               <div className="text-sm text-purple-600">Unverified</div>
             </div>

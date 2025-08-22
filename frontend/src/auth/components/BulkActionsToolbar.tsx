@@ -206,7 +206,7 @@ const BulkActionsToolbar = memo(function BulkActionsToolbar({
     }
   ];
 
-  const availableActions = bulkActions.filter(action => action.requiresPermission);
+  const availableActions = (bulkActions || []).filter(action => action.requiresPermission);
 
   if (selectedUserIds.length === 0 || availableActions.length === 0) {
     return null;
