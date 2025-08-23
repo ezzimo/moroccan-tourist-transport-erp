@@ -46,28 +46,41 @@ apiClient.interceptors.response.use(
     });
     
     if (error.response?.status === 401) {
-      // Handle token refresh logic
-      const refreshToken = localStorage.getItem('refresh_token');
-      if (refreshToken) {
-        try {
-          const response = await axios.post('/api/v1/auth/refresh', {
-            refresh_token: refreshToken
-          });
-          
-          localStorage.setItem('access_token', response.data.access_token);
-          
-          // Retry original request
-          error.config.headers.Authorization = `Bearer ${response.data.access_token}`;
-          return apiClient.request(error.config);
-        } catch (refreshError) {
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          window.location.href = '/login';
-        }
-      } else {
+      // Only logout for auth-related endpoints or if it's a critical auth failure
+      const isAuthEndpoint = error.config?.url?.includes('/auth/');
+      
+      if (isAuthEndpoint) {
+        // Auth endpoint failed - definitely logout
         localStorage.removeItem('access_token');
         localStorage.removeItem('refresh_token');
         window.location.href = '/login';
+      } else {
+        // Non-auth endpoint failed - log warning but don't logout immediately
+        console.warn('🔐 401 Unauthorized for non-auth endpoint:', error.config?.url);
+        console.warn('This might indicate a service-level authentication issue');
+        
+        // Still try refresh token logic if available
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (refreshToken) {
+          try {
+            const response = await axios.post('/api/v1/auth/refresh', {
+              refresh_token: refreshToken
+            });
+            
+            localStorage.setItem('access_token', response.data.access_token);
+            
+            // Retry original request
+            error.config.headers.Authorization = `Bearer ${response.data.access_token}`;
+            return apiClient.request(error.config);
+          } catch (refreshError) {
+            console.error('🔄 Token refresh failed:', refreshError);
+            localStorage.removeItem('access_token');
+            localStorage.removeItem('refresh_token');
+            window.location.href = '/login';
+          }
+        }
+        // If no refresh token, just return the error without logging out
+        // This allows the UI to handle the error gracefully
       }
     }
     return Promise.reject(error);
