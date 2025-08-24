@@ -150,7 +150,7 @@ services:
     build: ./backend/financial_service
     container_name: financial_service
     ports:
-    - 8005:8005
+    - 8006:8006
     env_file:
     - ./backend/financial_service/.env
     depends_on:
@@ -174,7 +174,7 @@ services:
     build: ./backend/hr_service
     container_name: hr_service
     ports:
-    - 8006:8006
+    - 8005:8005
     env_file:
     - ./backend/hr_service/.env
     depends_on:
