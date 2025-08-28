@@ -98,6 +98,11 @@ services:
     - db_driver:/var/lib/postgresql/data
     networks:
     - erp_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
   driver_service:
     build: ./backend/driver_service
     container_name: driver_service
@@ -106,9 +111,16 @@ services:
     env_file:
     - ./backend/driver_service/.env
     depends_on:
-    - db_driver
+      db_driver:
+        condition: service_healthy
     networks:
     - erp_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
   db_fleet:
     image: postgres:15
     container_name: db_fleet
