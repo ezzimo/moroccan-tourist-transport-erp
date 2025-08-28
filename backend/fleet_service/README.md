@@ -129,10 +129,10 @@ Key environment variables in `.env`:
 ```env
 DATABASE_URL=postgresql://postgres:password@localhost:5436/fleet_db
 REDIS_URL=redis://localhost:6383/4
-AUTH_SERVICE_URL=http://localhost:8000
-CRM_SERVICE_URL=http://localhost:8001
-BOOKING_SERVICE_URL=http://localhost:8002
-TOUR_SERVICE_URL=http://localhost:8003
+AUTH_SERVICE_URL=http://auth_service:8000
+CRM_SERVICE_URL=http://crm_app:8001
+BOOKING_SERVICE_URL=http://booking_app:8002
+TOUR_SERVICE_URL=http://tour_app:8003
 SECRET_KEY=your-super-secret-key
 MAINTENANCE_ALERT_DAYS=7
 COMPLIANCE_ALERT_DAYS=30

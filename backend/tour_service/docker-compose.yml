@@ -11,7 +11,7 @@ services:
       - AUTH_SERVICE_URL=http://auth_app:8000
       - CRM_SERVICE_URL=http://crm_app:8001
       - BOOKING_SERVICE_URL=http://booking_app:8002
-      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - SECRET_KEY=super-secret-key-change-this
       - ENVIRONMENT=development
     depends_on:
       - tour_db

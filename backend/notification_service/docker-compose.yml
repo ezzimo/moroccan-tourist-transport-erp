@@ -15,7 +15,7 @@ services:
       - FLEET_SERVICE_URL=http://fleet_app:8004
       - HR_SERVICE_URL=http://hr_app:8005
       - FINANCIAL_SERVICE_URL=http://financial_app:8006
-      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - SECRET_KEY=super-secret-key-change-this
       - ENVIRONMENT=development
     depends_on:
       - notification_db

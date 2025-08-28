@@ -108,7 +108,7 @@ Key environment variables in `.env`:
 ```env
 DATABASE_URL=postgresql://postgres:password@localhost:5433/crm_db
 REDIS_URL=redis://localhost:6380/1
-AUTH_SERVICE_URL=http://localhost:8000
+AUTH_SERVICE_URL=http://auth_service:8000
 SECRET_KEY=your-super-secret-key
 ```
 
