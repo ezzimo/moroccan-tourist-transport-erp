@@ -64,14 +64,14 @@ DATABASE_URL=postgresql://postgres:password@localhost:5442/driver_db
 REDIS_URL=redis://localhost:6389/10
 
 # Service Integration
-AUTH_SERVICE_URL=http://localhost:8000
-TOUR_SERVICE_URL=http://localhost:8003
-FLEET_SERVICE_URL=http://localhost:8004
-HR_SERVICE_URL=http://localhost:8005
-NOTIFICATION_SERVICE_URL=http://localhost:8007
+AUTH_SERVICE_URL=http://auth_service:8000
+TOUR_SERVICE_URL=http://tour_app:8003
+FLEET_SERVICE_URL=http://fleet_app:8004
+HR_SERVICE_URL=http://hr_app:8005
+NOTIFICATION_SERVICE_URL=http://notification_app:8007
 
 # JWT Configuration (should match auth service)
-SECRET_KEY=your-super-secret-jwt-key-change-in-production
+SECRET_KEY=super-secret-key-change-this
 ALGORITHM=HS256
 
 # File Upload
@@ -113,12 +113,12 @@ alembic upgrade head
 python -m driver_service.main
 
 # Or with uvicorn directly
-uvicorn driver_service.main:app --host 0.0.0.0 --port 8010 --reload
+uvicorn driver_service.main:app --host 0.0.0.0 --port 8003 --reload
 ```
 
 ### Health Check
 ```bash
-curl http://localhost:8010/health
+curl http://localhost:8003/health
 ```
 
 ## 📊 Database Schema
@@ -426,7 +426,7 @@ docker build -t driver-service:latest .
 # Run container
 docker run -d \
   --name driver-service \
-  -p 8010:8010 \
+  -p 8003:8003 \
   -e DATABASE_URL=postgresql://... \
   -e REDIS_URL=redis://... \
   driver-service:latest
@@ -452,7 +452,7 @@ spec:
       - name: driver-service
         image: driver-service:latest
         ports:
-        - containerPort: 8010
+        - containerPort: 8003
         env:
         - name: DATABASE_URL
           valueFrom:
@@ -505,9 +505,9 @@ tail -f logs/driver-service.log
 ## 📚 API Documentation
 
 ### Interactive Documentation
-- **Swagger UI**: http://localhost:8010/docs
-- **ReDoc**: http://localhost:8010/redoc
-- **OpenAPI JSON**: http://localhost:8010/openapi.json
+- **Swagger UI**: http://localhost:8003/docs
+- **ReDoc**: http://localhost:8003/redoc
+- **OpenAPI JSON**: http://localhost:8003/openapi.json
 
 ### Postman Collection
 Import the Postman collection from `docs/postman/driver-service.json`

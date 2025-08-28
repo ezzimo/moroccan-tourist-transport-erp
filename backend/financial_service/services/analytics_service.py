@@ -196,10 +196,10 @@ class AnalyticsService:
             
             total_amount += amount
             
-            if expense.status in [ExpenseStatus.APPROVED, ExpenseStatus.PAID]:
+            if expense.status in [ExpenseStatus.APPROVED.value, ExpenseStatus.PAID.value]:
                 approved_amount += amount
             
-            if expense.status == ExpenseStatus.PAID:
+            if expense.status == ExpenseStatus.PAID.value:
                 paid_amount += amount
             
             if expense.is_reimbursable:
@@ -324,7 +324,7 @@ class AnalyticsService:
             and_(
                 Expense.expense_date >= start_date,
                 Expense.expense_date <= end_date,
-                Expense.status == ExpenseStatus.PAID
+                Expense.status == ExpenseStatus.PAID.value
             )
         )
         expenses = self.session.exec(expense_query).all()

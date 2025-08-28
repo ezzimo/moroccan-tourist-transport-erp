@@ -4,7 +4,7 @@ services:
   driver_app:
     build: .
     ports:
-      - "8010:8010"
+      - "8003:8003"
     environment:
       - DATABASE_URL=postgresql://postgres:password@driver_db:5432/driver_db
       - REDIS_URL=redis://driver_redis:6379/10
@@ -13,7 +13,7 @@ services:
       - FLEET_SERVICE_URL=http://fleet_app:8004
       - HR_SERVICE_URL=http://hr_app:8005
       - NOTIFICATION_SERVICE_URL=http://notification_app:8007
-      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - SECRET_KEY=super-secret-key-change-this
       - ENVIRONMENT=development
     depends_on:
       - driver_db
@@ -21,7 +21,7 @@ services:
     volumes:
       - .:/app
       - ./uploads:/app/uploads
-    command: uvicorn driver_service.main:app --host 0.0.0.0 --port 8010 --reload
+    command: uvicorn driver_service.main:app --host 0.0.0.0 --port 8003 --reload
 
   driver_db:
     image: postgres:15
