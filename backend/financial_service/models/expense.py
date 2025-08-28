@@ -36,6 +36,8 @@ class ExpenseStatus(str, Enum):
     APPROVED = "Approved"
     REJECTED = "Rejected"
     PAID = "Paid"
+    PENDING = "Pending"
+    CANCELLED = "Cancelled"
 
 
 class CostCenter(str, Enum):

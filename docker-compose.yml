@@ -198,7 +198,7 @@ services:
     build: ./backend/inventory_service
     container_name: inventory_service
     ports:
-    - 8007:8007
+    - 8008:8008
     env_file:
     - ./backend/inventory_service/.env
     depends_on:
@@ -222,7 +222,7 @@ services:
     build: ./backend/notification_service
     container_name: notification_service
     ports:
-    - 8008:8008
+    - 8007:8007
     env_file:
     - ./backend/notification_service/.env
     depends_on:
