@@ -1,4 +1,7 @@
 backend/booking_service/
+backend/crm_service/
+backend/driver_service/
+backend/fleet_service/
 backend/hr_service/
 backend/financial_service/
 backend/inventory_service/
