@@ -4,7 +4,12 @@ Booking service for booking management operations
 
 from sqlmodel import Session, select, and_, or_
 from fastapi import HTTPException, status
-from models.booking import Booking, BookingStatus, PaymentStatus, ReservationItem
+from models import (
+    Booking,
+    BookingStatus,
+    PaymentStatus,
+    ReservationItem,
+)
 from schemas.booking import (
     BookingCreate,
     BookingUpdate,

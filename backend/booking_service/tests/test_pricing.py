@@ -3,7 +3,7 @@ Tests for pricing functionality
 """
 import pytest
 from services.pricing_service import PricingService
-from models.booking import DiscountType
+from models.enums import DiscountType
 from decimal import Decimal
 from datetime import date, timedelta
 
