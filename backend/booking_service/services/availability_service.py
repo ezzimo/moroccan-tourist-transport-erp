@@ -2,9 +2,10 @@
 Availability service for resource scheduling and availability checks
 """
 
-from sqlmodel import Session, select, and_, or_
+from sqlmodel import Session, select, and_
 from fastapi import HTTPException, status
-from models.booking import AvailabilitySlot, ResourceType
+from models.enums import ResourceType
+from models.availability_slot import AvailabilitySlot
 from schemas.booking import (
     AvailabilityRequest,
     AvailabilityResponse,
@@ -14,7 +15,7 @@ from schemas.booking import (
     AvailabilitySlotResponse,
 )
 from typing import List, Optional, Dict, Any
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 import uuid
 
 
@@ -36,15 +37,19 @@ class AvailabilityService:
         conditions = [
             AvailabilitySlot.date >= start_date,
             AvailabilitySlot.date <= end_date,
-            AvailabilitySlot.is_blocked == False,
+            AvailabilitySlot.is_blocked is False,
             AvailabilitySlot.available_capacity >= required_capacity,
         ]
 
         if request.resource_type:
-            conditions.append(AvailabilitySlot.resource_type == request.resource_type)
+            conditions.append(
+                AvailabilitySlot.resource_type == request.resource_type
+            )
 
         if request.resource_ids:
-            conditions.append(AvailabilitySlot.resource_id.in_(request.resource_ids))
+            conditions.append(
+                AvailabilitySlot.resource_id.in_(request.resource_ids)
+            )
 
         # Execute query
         query = select(AvailabilitySlot).where(and_(*conditions))
@@ -68,7 +73,11 @@ class AvailabilityService:
                 )
 
         available_resources = list(resource_availability.values())
-        total_available = len([r for r in available_resources if r.is_available])
+        total_available = len(
+            [
+                r for r in available_resources if r.is_available
+            ]
+        )
 
         return AvailabilityResponse(
             request_date=start_date,
@@ -96,7 +105,10 @@ class AvailabilityService:
         if existing_slot:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Availability slot already exists for this resource and date",
+                detail=(
+                    "Availability slot already exists for this resource and"
+                    "date"
+                ),
             )
 
         slot = AvailabilitySlot(
@@ -107,7 +119,8 @@ class AvailabilityService:
             start_time=slot_data.start_time,
             end_time=slot_data.end_time,
             total_capacity=slot_data.total_capacity,
-            available_capacity=slot_data.total_capacity,  # Initially all capacity is available
+            # Initially all capacity is available
+            available_capacity=slot_data.total_capacity,
             is_blocked=slot_data.is_blocked,
             block_reason=slot_data.block_reason,
         )
@@ -122,7 +135,9 @@ class AvailabilityService:
         self, slot_id: uuid.UUID, slot_data: AvailabilitySlotUpdate
     ) -> AvailabilitySlotResponse:
         """Update an existing availability slot"""
-        statement = select(AvailabilitySlot).where(AvailabilitySlot.id == slot_id)
+        statement = select(AvailabilitySlot).where(
+            AvailabilitySlot.id == slot_id
+        )
         slot = self.session.exec(statement).first()
 
         if not slot:
@@ -146,7 +161,11 @@ class AvailabilityService:
         return AvailabilitySlotResponse(**slot.model_dump())
 
     async def reserve_capacity(
-        self, resource_id: uuid.UUID, date: date, capacity: int, booking_id: uuid.UUID
+        self,
+        resource_id: uuid.UUID,
+        date: date,
+        capacity: int,
+        booking_id: uuid.UUID,
     ) -> bool:
         """Reserve capacity for a booking"""
         statement = select(AvailabilitySlot).where(
@@ -215,10 +234,16 @@ class AvailabilityService:
 
         slots = self.session.exec(statement).all()
 
-        return [AvailabilitySlotResponse(**slot.model_dump()) for slot in slots]
+        return [
+            AvailabilitySlotResponse(**slot.model_dump()) for slot in slots
+        ]
 
     async def block_resource(
-        self, resource_id: uuid.UUID, start_date: date, end_date: date, reason: str
+        self,
+        resource_id: uuid.UUID,
+        start_date: date,
+        end_date: date,
+        reason: str,
     ) -> List[AvailabilitySlotResponse]:
         """Block a resource for a date range"""
         statement = select(AvailabilitySlot).where(
@@ -300,7 +325,9 @@ class AvailabilityService:
             ),
             "blocked_slots": len([s for s in slots if s.is_blocked]),
             "fully_booked_slots": len(
-                [s for s in slots if s.available_capacity == 0 and not s.is_blocked]
+                [
+                    s for s in slots if s.available_capacity == 0 and not s.is_blocked
+                ]
             ),
             "total_capacity": sum(s.total_capacity for s in slots),
             "available_capacity": sum(

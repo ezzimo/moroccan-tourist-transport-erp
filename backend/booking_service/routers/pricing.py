@@ -7,7 +7,7 @@ from sqlmodel import Session
 from database import get_session
 from services.pricing_service import PricingService
 from schemas.booking import (
-    PricingRuleCreate,
+    PricingRuleBase,
     PricingRuleUpdate,
     PricingRuleResponse,
     PricingRequest,
@@ -78,7 +78,7 @@ async def validate_promo_code(
 
 @router.post("/rules", response_model=PricingRuleResponse)
 async def create_pricing_rule(
-    rule_data: PricingRuleCreate,
+    rule_data: PricingRuleBase,
     session: Session = Depends(get_session),
     current_user: CurrentUser = Depends(
         require_permission("booking", "create", "pricing")

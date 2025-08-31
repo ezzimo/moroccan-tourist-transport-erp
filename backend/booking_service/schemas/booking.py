@@ -2,11 +2,18 @@
 Booking-related Pydantic schemas
 """
 
-from pydantic import BaseModel, EmailStr, validator
+from pydantic import BaseModel, EmailStr, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from decimal import Decimal
-from models.booking import BookingStatus, ServiceType, PaymentStatus,  ItemType, ResourceType, DiscountType
+from models.enums import (
+    BookingStatus,
+    ServiceType,
+    PaymentStatus,
+    ItemType,
+    ResourceType,
+    DiscountType,
+)
 import uuid
 
 
@@ -27,13 +34,20 @@ class BookingCreate(BookingBase):
     promo_code: Optional[str] = None
     payment_method: Optional[str] = None
 
-    @validator("end_date")
+    @field_validator("end_date")
+    @classmethod
     def validate_end_date(cls, v, values):
-        if v and "start_date" in values and v < values["start_date"]:
+        start_date = (
+            values.data.get("start_date")
+            if hasattr(values, "data")
+            else values.get("start_date")
+        )
+        if v and start_date and v < start_date:
             raise ValueError("End date must be after start date")
         return v
 
-    @validator("pax_count")
+    @field_validator("pax_count")
+    @classmethod
     def validate_pax_count(cls, v):
         if v < 1 or v > 50:
             raise ValueError("Passenger count must be between 1 and 50")
@@ -151,7 +165,7 @@ class ReservationItemResponse(ReservationItemBase):
     is_cancelled: bool
     created_at: datetime
     updated_at: Optional[datetime]
-    
+
     @classmethod
     def from_model(cls, item):
         """Create response from database model"""
@@ -272,23 +286,42 @@ class PricingRuleBase(BaseModel):
     priority: int = 0
     is_combinable: bool = False
 
-
-class PricingRuleCreate(PricingRuleBase):
-    @validator('discount_percentage')
+    @field_validator('discount_percentage')
+    @classmethod
     def validate_percentage(cls, v, values):
-        if values.get('discount_type') == DiscountType.PERCENTAGE and (not v or v <= 0 or v > 100):
+        discount_type = (
+            values.data.get('discount_type')
+            if hasattr(values, "data")
+            else values.get('discount_type')
+        )
+        if (
+            discount_type == DiscountType.PERCENTAGE
+            and (not v or v <= 0 or v > 100)
+        ):
             raise ValueError('Discount percentage must be between 0 and 100')
         return v
-    
-    @validator('discount_amount')
+
+    @field_validator('discount_amount')
+    @classmethod
     def validate_amount(cls, v, values):
-        if values.get('discount_type') == DiscountType.FIXED_AMOUNT and (not v or v <= 0):
+        discount_type = (
+            values.data.get('discount_type')
+            if hasattr(values, "data")
+            else values.get('discount_type')
+        )
+        if discount_type == DiscountType.FIXED_AMOUNT and (not v or v <= 0):
             raise ValueError('Discount amount must be greater than 0')
         return v
-    
-    @validator('valid_until')
+
+    @field_validator('valid_until')
+    @classmethod
     def validate_dates(cls, v, values):
-        if 'valid_from' in values and v <= values['valid_from']:
+        valid_from = (
+            values.data.get('valid_from')
+            if hasattr(values, "data")
+            else values.get('valid_from')
+        )
+        if valid_from and v <= valid_from:
             raise ValueError('Valid until date must be after valid from date')
         return v
 
@@ -335,5 +368,3 @@ class PricingResponse(BaseModel):
     total_price: Decimal
     applied_rules: List[Dict[str, Any]] = []
     currency: str = "MAD"
-
-

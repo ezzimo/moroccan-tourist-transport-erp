@@ -19,7 +19,7 @@ from schemas.booking import (
 from utils.auth import require_permission, CurrentUser
 from utils.pagination import PaginationParams, PaginatedResponse
 from utils.pdf_generator import generate_booking_voucher
-from models.booking import BookingStatus, ServiceType, PaymentStatus
+from models.enums import BookingStatus, ServiceType, PaymentStatus
 from typing import List, Optional
 import redis
 import uuid
@@ -212,8 +212,7 @@ async def get_booking_voucher(
 
     # Get booking model for PDF generation
     from sqlmodel import select
-    from models.booking import Booking
-    from models.reservation_item import ReservationItem
+    from models import Booking, ReservationItem
 
     statement = select(Booking).where(Booking.id == booking_id)
     booking = session.exec(statement).first()

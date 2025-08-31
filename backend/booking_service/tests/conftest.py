@@ -3,23 +3,23 @@ Test configuration and fixtures for booking microservice
 """
 
 import pytest
+import fakeredis
+import os
+import uuid
 from fastapi.testclient import TestClient
 from sqlmodel import SQLModel, create_engine, Session
 from main import app
 from database import get_session, get_redis
-from models.booking import (
+from models import( 
     Booking,
     ServiceType,
+    DiscountType,
+    ResourceType,
     ReservationItem,
     ItemType,
     PricingRule,
-    DiscountType,
     AvailabilitySlot,
-    ResourceType,
 )
-import fakeredis
-import os
-import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 
