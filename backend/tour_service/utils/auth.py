@@ -32,7 +32,12 @@ async def verify_auth_token(token: str) -> Optional[Dict[str, Any]]:
     """Verify token with auth service"""
     try:
         # First try local JWT verification for performance
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        payload = jwt.decode(
+            token, 
+            settings.secret_key, 
+            algorithms=[settings.algorithm],
+            options={"verify_aud": False}  # Skip audience verification for compatibility
+        )
         print(f"Local JWT verification successful: {payload.get('email', 'unknown')}")
         return payload
     except JWTError as e:

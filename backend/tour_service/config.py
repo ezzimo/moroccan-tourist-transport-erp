@@ -7,22 +7,22 @@ from typing import List
 
 class Settings(BaseSettings):
     # Database
-    database_url: str
+    database_url: str = "postgresql://postgres:tour_pass@db_tour:5432/tour_db"
     
     # Redis
-    redis_url: str
+    redis_url: str = "redis://localhost:6382/3"
     
     # Service Integration
-    auth_service_url: str
-    crm_service_url: str
-    booking_service_url: str
+    auth_service_url: str = "http://auth_service:8000"
+    crm_service_url: str = "http://crm_service:8001"
+    booking_service_url: str = "http://booking_service:8002"
     
     # JWT (for token validation)
-    secret_key: str
+    secret_key: str = "super-secret-key-change-this"
     algorithm: str = "HS256"
     
     # CORS
-    allowed_origins: List[str]
+    allowed_origins: List[str] = ["http://localhost:3000", "http://localhost:8080"]
     
     # Environment
     environment: str = "development"

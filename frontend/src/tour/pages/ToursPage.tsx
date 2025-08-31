@@ -9,9 +9,9 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 export default function ToursPage() {
   const { data: featuredTemplates, isLoading: templatesLoading } = useFeaturedTourTemplates(6);
   const { data: activeTours, isLoading: toursLoading } = useActiveTours();
-  const { data: incidentStats, isLoading: statsLoading } = useIncidentStats(30);
+  const { data: incidentStats, isLoading: statsLoading, error: incidentStatsError } = useIncidentStats(30);
 
-  if (templatesLoading || toursLoading || statsLoading) {
+  if (templatesLoading || toursLoading) {
     return (
       <div className="flex items-center justify-center min-h-96">
         <LoadingSpinner size="lg" />
@@ -36,14 +36,14 @@ export default function ToursPage() {
     },
     {
       name: 'Total Incidents',
-      value: incidentStats?.total_incidents || 0,
+      value: incidentStatsError ? 0 : (incidentStats?.total_incidents || 0),
       icon: Clock,
       color: 'text-red-600 bg-red-100',
       href: '/tours/incidents',
     },
     {
       name: 'Urgent Issues',
-      value: incidentStats?.urgent_incidents || 0,
+      value: incidentStatsError ? 0 : (incidentStats?.urgent_incidents || 0),
       icon: Users,
       color: 'text-orange-600 bg-orange-100',
       href: '/tours/incidents?urgent=true',
