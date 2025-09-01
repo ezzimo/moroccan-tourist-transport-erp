@@ -33,6 +33,9 @@ export default function DashboardPage() {
   const { data: hrDashboard, isLoading: hrLoading } = useHRDashboard();
   const { data: inventoryDashboard, isLoading: inventoryLoading } = useInventoryDashboard();
   const { data: notificationStats, isLoading: notificationLoading } = useNotificationStats(30);
+  
+  // Handle incident stats with error fallback
+  const { data: incidentStats } = useIncidentStats(30);
 
   // Check if user can access user management
   const canManageUsers = isAdmin || hasPermission('auth', 'read', 'users');

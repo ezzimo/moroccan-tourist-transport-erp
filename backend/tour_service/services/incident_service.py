@@ -1,7 +1,7 @@
 """
 Incident service for managing tour issues and problems
 """
-from sqlmodel import Session, select, and_, func
+from sqlmodel import Session, select, and_, func, or_
 from fastapi import HTTPException, status
 from models.incident import Incident, IncidentType, SeverityLevel
 from models.tour_instance import TourInstance
