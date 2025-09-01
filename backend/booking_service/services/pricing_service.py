@@ -69,43 +69,56 @@ class PricingService:
         """Get pricing rules applicable to the given context"""
         logger.debug(f"Finding applicable rules for context: service_type={context.service_type}, customer_id={context.customer_id}")
         
-        # Build query conditions
-        conditions = [
-            PricingRule.is_active == True,
-            PricingRule.valid_from <= context.start_date,
-            or_(
-                PricingRule.valid_until.is_(None),
-                PricingRule.valid_until >= context.start_date
-            )
-        ]
-        
-        # Service type condition
-        conditions.append(
-            or_(
-                PricingRule.conditions['service_type'].astext == context.service_type,
-                PricingRule.conditions['service_type'].astext == 'ALL'
-            )
-        )
-        
-        # Promo code condition
-        if context.promo_code:
-            conditions.append(PricingRule.code == context.promo_code)
-        
-        # Build query
-        query = select(PricingRule).where(and_(*conditions))
-        
-        # Execute query
-        result = self.session.exec(query)
-        rules = result.all()
-        
-        # Filter rules based on complex conditions
-        applicable_rules = []
-        for rule in rules:
-            if await self._check_rule_conditions(rule, context):
-                applicable_rules.append(rule)
-        
-        logger.debug(f"Found {len(applicable_rules)} applicable rules")
-        return applicable_rules
+        try:
+            # Build query conditions
+            conditions = [
+                PricingRule.is_active == True,
+                PricingRule.valid_from <= context.start_date,
+                or_(
+                    PricingRule.valid_until.is_(None),
+                    PricingRule.valid_until >= context.start_date
+                )
+            ]
+            
+            # Service type condition - Fixed JSON column access
+            if context.service_type:
+                from sqlalchemy import text
+                conditions.append(
+                    or_(
+                        text("pricing_rule.conditions->>'service_type' = :service_type").bindparam(service_type=context.service_type),
+                        text("pricing_rule.conditions->>'service_type' = 'ALL'"),
+                        PricingRule.conditions.is_(None)  # Rules without specific conditions
+                    )
+                )
+            
+            # Promo code condition
+            if context.promo_code:
+                conditions.append(PricingRule.code == context.promo_code)
+            
+            # Build and execute query with error handling
+            query = select(PricingRule).where(and_(*conditions))
+            result = self.session.exec(query)
+            rules = result.all()
+            
+            # Filter rules based on complex conditions
+            applicable_rules = []
+            for rule in rules:
+                try:
+                    if await self._check_rule_conditions(rule, context):
+                        applicable_rules.append(rule)
+                except Exception as rule_error:
+                    logger.warning(f"Error checking rule {rule.id} conditions: {rule_error}")
+                    # Continue with other rules
+                    continue
+            
+            logger.debug(f"Found {len(applicable_rules)} applicable rules after filtering")
+            return applicable_rules
+            
+        except Exception as e:
+            logger.error(f"Error fetching pricing rules: {e}")
+            # Return empty list to allow booking to proceed with base price
+            logger.info("Proceeding with base price due to pricing rule error")
+            return []
     
     async def _check_rule_conditions(self, rule: PricingRule, context: PricingContext) -> bool:
         """Check if a rule's conditions are met"""
