@@ -45,6 +45,10 @@ class Settings(BaseSettings):
         alias="ALLOWED_ORIGINS"
     )
     
+    # Pagination
+    default_page_size: int = 20
+    max_page_size: int = 100
+    
     # Environment
     environment: str = Field(default="development", alias="ENVIRONMENT")
     debug: bool = Field(default=True, alias="DEBUG")
