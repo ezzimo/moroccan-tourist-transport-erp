@@ -71,7 +71,7 @@ def create_access_token(
         "email": email,
         "scopes": scopes or [],
         "iss": ISSUER,
-        "aud": getattr(settings, 'jwt_audience', AUDIENCE),
+        "aud": settings.jwt_audience,
         "iat": int(iat.timestamp()),
         "nbf": int(nbf.timestamp()),
         "exp": int(exp.timestamp()),

@@ -1,8 +1,10 @@
 """
-Configuration settings for the booking microservice
+Configuration settings for the booking service
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 from typing import List
+import json
 
 
 class Settings(BaseSettings):
@@ -10,7 +12,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql://postgres:booking_pass@db_booking:5432/booking_db"
     
     # Redis
-    redis_url: str = "redis://localhost:6381/2"
+    redis_url: str = "redis://localhost:6379/2"
     
     # Service Integration
     auth_service_url: str = "http://auth_service:8000"
@@ -18,11 +20,11 @@ class Settings(BaseSettings):
     fleet_service_url: str = "http://fleet_service:8004"
     
     # JWT Configuration (aligned with auth service)
-    jwt_secret_key: str = "super-secret-key-change-this"
-    jwt_algorithm: str = "HS256"
+    secret_key: str = "super-secret-key-change-this"
+    algorithm: str = "HS256"
     jwt_audience: str = "mtterp"
     jwt_issuer: str = "auth-service"
-    jwt_allowed_audiences: List[str] = ["mtterp", "tourist-erp"]
+    jwt_allowed_audiences: List[str] = ["mtterp"]
     jwt_disable_audience_check: bool = False
     
     # CORS
@@ -37,13 +39,33 @@ class Settings(BaseSettings):
     max_page_size: int = 100
     
     # Booking Configuration
-    default_currency: str = "MAD"
-    booking_expiry_hours: int = 24
-    max_participants_per_booking: int = 50
+    default_booking_expiry_hours: int = 24
+    max_booking_duration_days: int = 365
     
-    # Pricing Configuration
-    default_tax_rate: float = 20.0
-    enable_dynamic_pricing: bool = True
+    @field_validator("jwt_allowed_audiences", mode="before")
+    @classmethod
+    def parse_jwt_audiences(cls, v):
+        """Parse JWT audiences from JSON string or comma-separated values"""
+        if not v:
+            return ["mtterp"]  # Default audience
+        
+        if isinstance(v, list):
+            return v
+        
+        if isinstance(v, str):
+            # Try JSON array first
+            if v.strip().startswith('[') and v.strip().endswith(']'):
+                try:
+                    parsed = json.loads(v)
+                    if isinstance(parsed, list):
+                        return parsed
+                except json.JSONDecodeError:
+                    pass
+            
+            # Fall back to comma-separated
+            return [aud.strip() for aud in v.split(',') if aud.strip()]
+        
+        return ["mtterp"]
     
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

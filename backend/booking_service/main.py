@@ -1,5 +1,5 @@
 """
-FastAPI application entry point for booking microservice
+FastAPI application entry point for booking service
 """
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -7,9 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from config import settings
 from database import create_db_and_tables
-from routers import (
-    bookings_router, availability_router, pricing_router, reservation_items_router
-)
+from routers import bookings_router, pricing_router, availability_router, reservation_items_router
 import logging
 
 
@@ -64,7 +62,8 @@ async def internal_server_error_handler(request: Request, exc: Exception):
 async def startup_event():
     """Initialize database and create tables"""
     create_db_and_tables()
-    logger.info("Booking database initialized successfully")
+    logger.info("Booking service database initialized successfully")
+    logger.info(f"JWT Configuration: audience={settings.jwt_audience}, allowed_audiences={settings.jwt_allowed_audiences}")
 
 
 # Health check
@@ -74,14 +73,19 @@ async def health_check():
     return {
         "status": "healthy",
         "service": "booking-microservice",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "jwt_config": {
+            "audience": settings.jwt_audience,
+            "allowed_audiences": settings.jwt_allowed_audiences,
+            "audience_check_disabled": settings.jwt_disable_audience_check
+        }
     }
 
 
 # Include routers
 app.include_router(bookings_router, prefix="/api/v1")
-app.include_router(availability_router, prefix="/api/v1")
 app.include_router(pricing_router, prefix="/api/v1")
+app.include_router(availability_router, prefix="/api/v1")
 app.include_router(reservation_items_router, prefix="/api/v1")
 
 
@@ -95,14 +99,12 @@ async def root():
         "description": "Booking and reservation service for Moroccan tourist transport ERP system",
         "docs": "/docs" if settings.debug else "Documentation disabled in production",
         "features": [
-            "Real-time booking management",
-            "Dynamic pricing engine",
+            "Booking management",
+            "Pricing calculations",
             "Availability checking",
-            "Multi-service reservations",
-            "PDF voucher generation",
-            "Cancellation workflows",
-            "Resource scheduling",
-            "Discount management"
+            "Reservation items",
+            "Real-time notifications",
+            "Multi-channel booking support"
         ]
     }
 
