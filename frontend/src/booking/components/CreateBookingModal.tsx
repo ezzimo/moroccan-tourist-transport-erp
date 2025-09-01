@@ -95,6 +95,7 @@ export default function CreateBookingModal({ isOpen, onClose }: CreateBookingMod
     e.preventDefault();
     try {
       await createBooking.mutateAsync(formData);
+      console.log('✅ Booking created successfully');
       onClose();
       setFormData({
         customer_id: '',
@@ -107,7 +108,37 @@ export default function CreateBookingModal({ isOpen, onClose }: CreateBookingMod
         base_price: 0,
       });
     } catch (error) {
-      console.error('Failed to create booking:', error);
+      console.error('❌ Failed to create booking:', error);
+      
+      // Handle typed errors from backend
+      const errorType = (error as any)?.type;
+      const errorMessage = (error as any)?.message || 'Failed to create booking';
+      
+      let userMessage = errorMessage;
+      
+      switch (errorType) {
+        case 'customer_not_found':
+          userMessage = 'Selected customer not found. Please refresh and try again.';
+          break;
+        case 'customer_forbidden':
+          userMessage = 'Not authorized to access customer information.';
+          break;
+        case 'customer_service_unreachable':
+          userMessage = 'Customer service temporarily unavailable. Please try again.';
+          break;
+        case 'validation_error':
+          userMessage = `Validation error: ${errorMessage}`;
+          break;
+        case 'booking_create_failed':
+          userMessage = 'Unable to create booking. Please try again.';
+          break;
+        default:
+          userMessage = errorMessage;
+      }
+      
+      // You could show this in a toast notification or error state
+      // For now, we'll log it and the error will be handled by the mutation error state
+      console.warn('User-friendly error message:', userMessage);
     }
   };
 

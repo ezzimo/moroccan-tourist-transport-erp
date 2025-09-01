@@ -23,13 +23,17 @@ from schemas.booking_filters import BookingFilters
 from utils.pagination import PaginationParams, paginate_query
 from utils.locking import acquire_booking_lock, release_booking_lock
 from services.pricing_service import PricingService
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime, timedelta
 from decimal import Decimal
 from math import ceil
 import redis
 import uuid
 import httpx
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BookingService:
@@ -41,9 +45,15 @@ class BookingService:
         self.pricing_service = PricingService(session)
 
     async def create_booking(
-        self, booking_data: BookingCreate, current_user_id: uuid.UUID
+        self,
+        booking_data: BookingCreate,
+        current_user_id: uuid.UUID,
+        customer_verified: bool = False,
+        customer_snapshot: Optional[Dict[str, Any]] = None,
     ) -> BookingResponse:
         """Create a new booking with locking mechanism"""
+        logger.info("Creating booking with verification status: %s", customer_verified)
+        
         # Acquire lock for booking creation
         lock_key = (
             f"booking_create:{booking_data.customer_id}:{booking_data.start_date}"
@@ -80,6 +90,26 @@ class BookingService:
                 pricing_request
             )
 
+            # Prepare booking data
+            booking_dict = booking_data.model_dump()
+            
+            # Add verification metadata to internal notes
+            notes = booking_dict.get("internal_notes", "") or ""
+            verification_info = []
+            
+            if not customer_verified:
+                verification_info.append("[customer_unverified]")
+            else:
+                verification_info.append("[customer_verified]")
+                if customer_snapshot:
+                    customer_name = customer_snapshot.get("full_name") or customer_snapshot.get("company_name")
+                    if customer_name:
+                        verification_info.append(f"customer_name:{customer_name}")
+            
+            if verification_info:
+                notes = f"{' '.join(verification_info)} {notes}".strip()
+                booking_dict["internal_notes"] = notes
+
             # Create booking
             booking = Booking(
                 customer_id=booking_data.customer_id,
@@ -95,6 +125,7 @@ class BookingService:
                 total_price=pricing_result["total_price"],
                 payment_method=booking_data.payment_method,
                 special_requests=booking_data.special_requests,
+                internal_notes=booking_dict.get("internal_notes"),
                 expires_at=datetime.utcnow() + timedelta(minutes=30),  # 30 min expiry
             )
 
@@ -105,6 +136,7 @@ class BookingService:
             # Schedule expiry check
             await self._schedule_booking_expiry(booking.id)
 
+            logger.info("Booking created: %s (verified: %s)", booking.id, customer_verified)
             return BookingResponse(**booking.model_dump())
 
         finally:

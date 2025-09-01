@@ -28,8 +28,25 @@ export const bookingApi = {
   },
 
   createBooking: async (data: CreateBookingData): Promise<Booking> => {
-    const response = await apiClient.post('/bookings/', data);
-    return response.data;
+    try {
+      const response = await apiClient.post('/bookings/', data);
+      return response.data;
+    } catch (error: any) {
+      // Enhanced error handling for typed backend errors
+      if (error.response?.data?.type) {
+        const errorType = error.response.data.type;
+        const errorDetail = error.response.data.detail;
+        
+        // Create a more specific error object
+        const enhancedError = new Error(errorDetail);
+        (enhancedError as any).type = errorType;
+        (enhancedError as any).status = error.response.status;
+        throw enhancedError;
+      }
+      
+      // Fallback to original error
+      throw error;
+    }
   },
 
   confirmBooking: async (id: string, data: ConfirmBookingData): Promise<Booking> => {

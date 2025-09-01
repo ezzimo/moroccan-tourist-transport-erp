@@ -88,6 +88,9 @@ services:
       - DATABASE_URL=postgresql://postgres:booking_pass@db_booking:5432/booking_db
       - REDIS_URL=redis://redis_auth:6379/2
       - AUTH_SERVICE_URL=http://auth_service:8000
+      - CUSTOMER_SERVICE_BASE=http://crm_service:8001/api/v1
+      - CUSTOMER_VERIFY_STRICT=false
+      - CUSTOMER_HTTP_TIMEOUT=2.0
       - JWT_SECRET_KEY=super-secret-key-change-this
       - JWT_ALGORITHM=HS256
       - JWT_AUDIENCE=mtterp

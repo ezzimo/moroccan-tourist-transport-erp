@@ -9,6 +9,11 @@ from fastapi import APIRouter, Depends, Body, Query
 from sqlmodel import Session
 from database import get_session, get_redis
 from services.booking_service import BookingService
+from clients.customer_client import get_customer_by_id, CustomerVerificationError
+from uuid import UUID
+import logging
+
+logger = logging.getLogger(__name__)
 from schemas.booking_filters import BookingFilters
 from schemas.booking import BookingCreate, BookingUpdate, BookingResponse
 from utils.auth import get_current_user, require_permission, CurrentUser
@@ -33,6 +38,35 @@ async def create_booking(
     """Create a new booking"""
     logger.info(f"Creating booking for customer {booking_data.customer_id}")
     
+    # Resilient customer verification
+    try:
+        token = request.headers.get("Authorization")
+        result = await booking_service.create_booking(
+            payload,
+            customer_verified=customer is not None,
+            customer_snapshot=customer
+        )
+        logger.info("Booking created successfully: %s", result.id)
+    except CustomerVerificationError as e:
+        logger.warning("Customer verification strict failure: %s (%s)", e, e.type)
+        logger.warning("Booking validation error: %s", e)
+        raise HTTPException(
+            status_code=e.status, 
+            detail={"type": "validation_error", "detail": str(e)}
+        )
+    except Exception as e:
+        logger.error("Unexpected customer verification error: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"type": "booking_create_failed", "detail": "Unexpected error during booking creation"}
+        )
+
+    if customer is None:
+        # Customer not found or verification skipped due to non-strict mode
+        logger.warning("Customer %s not found or unverifiable", payload.customer_id)
+        # In non-strict mode, we proceed but tag the booking
+        pass
+
     booking_service = BookingService(db, redis_client)
     return await booking_service.create_booking(booking_data, current_user.user_id)
 
