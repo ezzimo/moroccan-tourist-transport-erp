@@ -1,6 +1,6 @@
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy.orm import Session
 import redis
 
@@ -32,6 +32,7 @@ async def create_booking(
     db: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
     current_user: CurrentUser = Depends(get_current_user),
+    request: Request = None,
     _: None = Depends(require_permission("booking", "create", "bookings")),
 ):
     """Create a new booking with comprehensive validation and pricing"""
@@ -41,6 +42,18 @@ async def create_booking(
     try:
         # Create service with access token for customer verification
         service = BookingService(db, redis_client, access_token=getattr(current_user, 'access_token', None))
+
+        # Try to forward Authorization header if present
+        bearer = None
+        try:
+            auth_header = request.headers.get("Authorization") if request else None
+            if auth_header and auth_header.lower().startswith("bearer "):
+                bearer = auth_header.split(" ", 1)[1]
+        except Exception:
+            bearer = None
+
+        await service._verify_customer_exists(str(payload.customer_id), bearer)
+
         result = await service.create_booking(payload, created_by=current_user.user_id)
         
         logger.info("Booking created successfully: %s", result.get("id", "unknown"))
