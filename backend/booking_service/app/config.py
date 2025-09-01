@@ -1,4 +1,6 @@
-# backend/booking_service/app/config.py
+"""
+Configuration settings for the booking microservice
+"""
 from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
