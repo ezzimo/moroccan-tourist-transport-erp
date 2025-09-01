@@ -2,7 +2,7 @@
 Booking service for booking management operations
 """
 
-from sqlmodel import Session, select, and_, or_
+from sqlmodel import Session, select, and_, or_, func
 from fastapi import HTTPException, status
 from models import (
     Booking,
@@ -19,12 +19,14 @@ from schemas.booking import (
     BookingCancel,
     BookingSearch,
 )
+from schemas.booking_filters import BookingFilters
 from utils.pagination import PaginationParams, paginate_query
 from utils.locking import acquire_booking_lock, release_booking_lock
 from services.pricing_service import PricingService
 from typing import List, Optional, Tuple
 from datetime import datetime, timedelta
 from decimal import Decimal
+from math import ceil
 import redis
 import uuid
 import httpx
@@ -127,55 +129,106 @@ class BookingService:
 
         return BookingResponse(**booking.model_dump())
 
-    async def get_bookings(
-        self, pagination: PaginationParams, search: Optional[BookingSearch] = None
-    ) -> Tuple[List[BookingResponse], int]:
-        """Get list of bookings with optional search"""
+    async def get_bookings(self, filters: BookingFilters):
+        """Get paginated list of bookings with filters"""
+        # Build base query
         query = select(Booking)
-
-        # Apply search filters
-        if search:
-            conditions = []
-
-            if search.customer_id:
-                conditions.append(Booking.customer_id == search.customer_id)
-
-            if search.status:
-                conditions.append(Booking.status == search.status)
-
-            if search.service_type:
-                conditions.append(Booking.service_type == search.service_type)
-
-            if search.payment_status:
-                conditions.append(Booking.payment_status == search.payment_status)
-
-            if search.start_date_from:
-                conditions.append(Booking.start_date >= search.start_date_from)
-
-            if search.start_date_to:
-                conditions.append(Booking.start_date <= search.start_date_to)
-
-            if search.lead_passenger_name:
-                conditions.append(
-                    Booking.lead_passenger_name.ilike(f"%{search.lead_passenger_name}%")
+        count_query = select(func.count(Booking.id))
+        
+        # Apply filters based on actual Booking model fields
+        conditions = []
+        
+        if filters.customer_id is not None:
+            conditions.append(Booking.customer_id == filters.customer_id)
+        
+        if filters.service_type is not None:
+            conditions.append(Booking.service_type == filters.service_type)
+        
+        if filters.status is not None:
+            conditions.append(Booking.status == filters.status)
+        
+        if filters.payment_status is not None:
+            conditions.append(Booking.payment_status == filters.payment_status)
+        
+        if filters.start_date_from is not None:
+            from datetime import datetime
+            start_date = datetime.strptime(filters.start_date_from, "%Y-%m-%d").date()
+            conditions.append(Booking.start_date >= start_date)
+        
+        if filters.start_date_to is not None:
+            from datetime import datetime
+            end_date = datetime.strptime(filters.start_date_to, "%Y-%m-%d").date()
+            conditions.append(Booking.start_date <= end_date)
+        
+        if filters.created_from is not None:
+            conditions.append(Booking.created_at >= filters.created_from)
+        
+        if filters.created_to is not None:
+            conditions.append(Booking.created_at <= filters.created_to)
+        
+        if filters.pax_count_min is not None:
+            conditions.append(Booking.pax_count >= filters.pax_count_min)
+        
+        if filters.pax_count_max is not None:
+            conditions.append(Booking.pax_count <= filters.pax_count_max)
+        
+        if filters.currency is not None:
+            conditions.append(Booking.currency == filters.currency)
+        
+        if filters.search:
+            # Search in lead passenger name and email (actual model fields)
+            search_term = f"%{filters.search}%"
+            conditions.append(
+                or_(
+                    func.lower(Booking.lead_passenger_name).like(search_term.lower()),
+                    func.lower(Booking.lead_passenger_email).like(search_term.lower())
                 )
-
-            if search.lead_passenger_email:
-                conditions.append(
-                    Booking.lead_passenger_email.ilike(
-                        f"%{search.lead_passenger_email}%"
-                    )
-                )
-
-            if conditions:
-                query = query.where(and_(*conditions))
-
-        # Order by creation date (newest first)
-        query = query.order_by(Booking.created_at.desc())
-
-        bookings, total = paginate_query(self.session, query, pagination)
-
-        return [BookingResponse(**booking.model_dump()) for booking in bookings], total
+            )
+        
+        # Apply all conditions
+        if conditions:
+            from sqlmodel import and_
+            query = query.where(and_(*conditions))
+            count_query = count_query.where(and_(*conditions))
+        
+        # Apply sorting
+        if filters.sort_by:
+            # Safe list of sortable columns
+            sortable_columns = {
+                'created_at': Booking.created_at,
+                'start_date': Booking.start_date,
+                'total_price': Booking.total_price,
+                'lead_passenger_name': Booking.lead_passenger_name,
+                'status': Booking.status,
+                'pax_count': Booking.pax_count
+            }
+            
+            if filters.sort_by in sortable_columns:
+                col = sortable_columns[filters.sort_by]
+                if filters.sort_order == "desc":
+                    query = query.order_by(col.desc())
+                else:
+                    query = query.order_by(col.asc())
+            else:
+                # Default sort if invalid sort_by
+                query = query.order_by(Booking.created_at.desc())
+        else:
+            # Default sort by creation date
+            query = query.order_by(Booking.created_at.desc())
+        
+        # Get total count
+        total = self.session.exec(count_query).one()
+        
+        # Apply pagination
+        items = self.session.exec(query.offset(filters.offset).limit(filters.size)).all()
+        
+        return {
+            "items": items,
+            "page": filters.page,
+            "size": filters.size,
+            "total": total,
+            "pages": ceil(total / filters.size) if filters.size else 1
+        }
 
     async def update_booking(
         self, booking_id: uuid.UUID, booking_data: BookingUpdate

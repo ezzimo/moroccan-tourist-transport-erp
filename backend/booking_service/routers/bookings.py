@@ -18,12 +18,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bookings", tags=["Booking Management"])
 
 
+from typing import Optional
+
 @router.post("/", response_model=BookingResponse)
 async def create_booking(
     booking_data: BookingCreate,
     db: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
     current_user: CurrentUser = Depends(get_current_user),
+    redis_client = Depends(get_redis),
     _: None = Depends(require_permission("booking", "create", "bookings"))
 ):
     """Create a new booking"""
@@ -92,10 +95,11 @@ async def confirm_booking(
     """Confirm a pending booking"""
     booking_service = BookingService(db, redis_client)
     return await booking_service.confirm_booking(booking_id, current_user.user_id)
+    redis_client = Depends(get_redis),
 
 
 @router.post("/{booking_id}/cancel")
-async def cancel_booking(
+    booking_service = BookingService(db, redis_client)
     booking_id: uuid.UUID,
     reason: str,
     db: Session = Depends(get_session),
@@ -103,18 +107,20 @@ async def cancel_booking(
     current_user: CurrentUser = Depends(get_current_user),
     _: None = Depends(require_permission("booking", "update", "bookings"))
 ):
+    redis_client = Depends(get_redis),
     """Cancel a booking"""
     booking_service = BookingService(db, redis_client)
     return await booking_service.cancel_booking(booking_id, reason, current_user.user_id)
-
+    booking_service = BookingService(db, redis_client)
 
 @router.delete("/{booking_id}")
 async def delete_booking(
     booking_id: uuid.UUID,
     db: Session = Depends(get_session),
     current_user: CurrentUser = Depends(get_current_user),
+    redis_client = Depends(get_redis),
     _: None = Depends(require_permission("booking", "delete", "bookings"))
 ):
     """Delete a booking"""
-    booking_service = BookingService(db)
+    booking_service = BookingService(db, redis_client)
     return await booking_service.delete_booking(booking_id)
