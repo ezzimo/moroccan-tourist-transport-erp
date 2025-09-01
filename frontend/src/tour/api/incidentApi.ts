@@ -19,46 +19,45 @@ export const tourIncidentApi = {
       }
     });
 
-    const response = await apiClient.get(`/incidents/?${params}`);
-    const response = await apiClient.get(`/tour-incidents/?${params}`);
-    return response.data;
+    const { data } = await apiClient.get(`/tour-incidents/?${params}`);
+    return data;
   },
 
   getIncident: async (id: string): Promise<TourIncident> => {
-    const response = await apiClient.get(`/tour-incidents/${id}`);
-    return response.data;
+    const { data } = await apiClient.get(`/tour-incidents/${id}`);
+    return data;
   },
 
   getUrgentIncidents: async (): Promise<TourIncident[]> => {
-    const response = await apiClient.get('/tour-incidents/urgent');
-    return response.data;
+    const { data } = await apiClient.get('/tour-incidents/urgent');
+    return data;
   },
 
   getIncidentStats: async (days = 30): Promise<IncidentStats> => {
-    const response = await apiClient.get('/tour-incidents/stats', {
+    const { data } = await apiClient.get('/tour-incidents/stats', {
       params: { days }
     });
-    return response.data;
+    return data;
   },
 
   createIncident: async (data: CreateTourIncidentData): Promise<TourIncident> => {
-    const response = await apiClient.post('/tour-incidents', data);
-    return response.data;
+    const { data: result } = await apiClient.post('/tour-incidents', data);
+    return result;
   },
 
   updateIncident: async (id: string, data: Partial<CreateTourIncidentData>): Promise<TourIncident> => {
-    const response = await apiClient.put(`/tour-incidents/${id}`, data);
-    return response.data;
+    const { data: result } = await apiClient.put(`/tour-incidents/${id}`, data);
+    return result;
   },
 
   resolveIncident: async (id: string, data: ResolveIncidentData): Promise<TourIncident> => {
-    const response = await apiClient.post(`/tour-incidents/${id}/resolve`, data);
-    return response.data;
+    const { data: result } = await apiClient.post(`/tour-incidents/${id}/resolve`, data);
+    return result;
   },
 
   escalateIncident: async (id: string, data: EscalateIncidentData): Promise<TourIncident> => {
-    const response = await apiClient.post(`/tour-incidents/${id}/escalate`, data);
-    return response.data;
+    const { data: result } = await apiClient.post(`/tour-incidents/${id}/escalate`, data);
+    return result;
   },
 
   deleteIncident: async (id: string): Promise<void> => {
