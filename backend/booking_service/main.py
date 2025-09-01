@@ -43,8 +43,10 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
+    logger.warning(f"Validation error on {request.method} {request.url}: {exc.errors()}")
             "detail": "Validation error",
-            "errors": exc.errors()
+            "errors": exc.errors(),
+            "type": "validation_error"
         }
     )
 
@@ -52,10 +54,14 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.exception_handler(500)
 async def internal_server_error_handler(request: Request, exc: Exception):
     """Handle internal server errors"""
-    logger.error(f"Internal server error: {str(exc)}")
+    logger.exception(f"Internal server error on {request.method} {request.url}: {str(exc)}")
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"detail": "Internal server error"}
+        content={
+            "detail": "Internal server error",
+            "type": "system_error",
+            "error_code": "INTERNAL_ERROR"
+        }
     )
 
 

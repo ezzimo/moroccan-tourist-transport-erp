@@ -6,7 +6,9 @@ export function usePricingCalculation(data: PricingRequest, enabled = true) {
   return useQuery({
     queryKey: ['pricing-calculation', data],
     queryFn: () => pricingApi.calculatePricing(data),
-    enabled: enabled && !!data.service_type && !!data.base_price && !!data.pax_count,
+    enabled: enabled && !!data.service_type && data.base_price > 0 && !!data.pax_count && !!data.start_date,
+    retry: false,
+    refetchOnWindowFocus: false,
   });
 }
 
