@@ -106,7 +106,7 @@ async def health_check():
                 "audience": settings.jwt_audience,
                 "allowed_audiences": settings.jwt_allowed_audiences,
                 "issuer": settings.jwt_issuer
-            }
+            },
             "redis": redis_status,
             "jwt_config": {
                 "audience": settings.jwt_audience,
