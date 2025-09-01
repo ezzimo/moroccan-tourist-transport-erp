@@ -22,3 +22,6 @@ environ/
 backend/booking_service/models/booking_service_models_refactored.zip
 backend/booking_service/models/booking_service_models_refactored/*
 .env
+*.env
+.env
+backend/**/.env
