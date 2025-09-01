@@ -1,196 +1,203 @@
 """
-Pricing service for dynamic pricing and discount calculations
+Pricing service for calculating booking prices with discounts
 """
-
-from sqlmodel import Session, select
-from models.pricing_rule import PricingRule, DiscountType
-from schemas.booking import PricingRequest, PricingResponse
-from typing import List, Dict, Any
+from sqlmodel import Session, select, and_, or_
+from fastapi import HTTPException, status
+from models.pricing_rule import PricingRule
+from schemas.pricing import PricingContext, PricingCalculation, AppliedRule
+from typing import List, Optional
+from datetime import date, datetime
 from decimal import Decimal
-from datetime import date
-import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PricingService:
-    """Service for handling pricing calculations and discount applications"""
-
+    """Service for handling pricing calculations and rule management"""
+    
     def __init__(self, session: Session):
         self.session = session
-
-    async def calculate_pricing(
-        self, pricing_request: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Calculate final pricing with applicable discounts"""
-        base_price = Decimal(str(pricing_request["base_price"]))
-        pax_count = pricing_request["pax_count"]
-        service_type = pricing_request["service_type"]
-        start_date = pricing_request["start_date"]
-        customer_id = pricing_request.get("customer_id")
-        promo_code = pricing_request.get("promo_code")
-
-        # Get applicable pricing rules
-        applicable_rules = await self._get_applicable_rules(
-            service_type=service_type,
-            start_date=start_date,
-            base_price=base_price,
-            pax_count=pax_count,
-            promo_code=promo_code,
-            customer_id=customer_id,
-        )
-
+    
+    async def calculate_pricing(self, context: PricingContext) -> PricingCalculation:
+        """Calculate pricing with applicable discounts using unified context"""
+        logger.debug(f"Calculating pricing for context: {context.service_type}, {context.pax_count} pax, {context.base_price} base")
+        
+        # Get applicable rules
+        applicable_rules = await self._get_applicable_rules(context)
+        
         # Calculate discounts
-        total_discount = Decimal(0)
+        total_discount = Decimal('0.00')
         applied_rules = []
-
+        
         for rule in applicable_rules:
-            discount_amount = rule.calculate_discount(base_price, pax_count)
-
+            discount_amount = self._calculate_rule_discount(rule, context)
             if discount_amount > 0:
                 total_discount += discount_amount
-                applied_rules.append(
-                    {
-                        "rule_id": str(rule.id),
-                        "rule_name": rule.name,
-                        "discount_type": rule.discount_type.value,
-                        "discount_amount": float(discount_amount),
-                    }
-                )
-
+                applied_rules.append(AppliedRule(
+                    rule_id=rule.id,
+                    rule_name=rule.name,
+                    discount_type=rule.discount_type,
+                    discount_amount=discount_amount,
+                    discount_percentage=rule.discount_percentage
+                ))
+                
                 # Update rule usage
                 rule.current_uses += 1
                 self.session.add(rule)
-
-        # Ensure discount doesn't exceed base price
-        if total_discount > base_price:
-            total_discount = base_price
-
-        final_price = base_price - total_discount
-
+        
+        # Calculate final price
+        final_price = max(context.base_price - total_discount, Decimal('0.00'))
+        
         # Commit rule usage updates
         self.session.commit()
-
-        return {
-            "base_price": base_price,
-            "discount_amount": total_discount,
-            "total_price": final_price,
-            "applied_rules": applied_rules,
-            "currency": "MAD",
-        }
-
-    async def _get_applicable_rules(
-        self,
-        service_type: str,
-        start_date: date,
-        base_price: Decimal,
-        pax_count: int,
-        promo_code: str = None,
-    ) -> List[PricingRule]:
-        """Get all applicable pricing rules"""
-        query = select(PricingRule).where(
-            PricingRule.is_active == True,
-            PricingRule.valid_from <= date.today(),
-            PricingRule.valid_until >= date.today(),
+        
+        calculation = PricingCalculation(
+            base_price=context.base_price,
+            discount_amount=total_discount,
+            total_price=final_price,
+            applied_rules=applied_rules,
+            currency="MAD",
+            calculation_details={
+                "service_type": context.service_type,
+                "pax_count": context.pax_count,
+                "start_date": context.start_date.isoformat(),
+                "rules_evaluated": len(applicable_rules),
+                "rules_applied": len(applied_rules)
+            }
         )
-
-        # Add promo code filter if provided
-        if promo_code:
-            query = query.where(PricingRule.code == promo_code)
-
+        
+        logger.info(f"Pricing calculated: {context.base_price} -> {final_price} (discount: {total_discount})")
+        return calculation
+    
+    async def _get_applicable_rules(self, context: PricingContext) -> List[PricingRule]:
+        """Get pricing rules applicable to the given context"""
+        logger.debug(f"Finding applicable rules for: {context.service_type}, customer: {context.customer_id}")
+        
+        # Base query for active rules within date range
+        query = select(PricingRule).where(
+            and_(
+                PricingRule.is_active == True,
+                PricingRule.valid_from <= context.start_date,
+                PricingRule.valid_until >= context.start_date
+            )
+        )
+        
+        # Check usage limits
+        query = query.where(
+            or_(
+                PricingRule.max_uses.is_(None),
+                PricingRule.current_uses < PricingRule.max_uses
+            )
+        )
+        
         # Order by priority (higher priority first)
         query = query.order_by(PricingRule.priority.desc())
-
-        all_rules = self.session.exec(query).all()
-
-        # Filter rules that can apply to this booking
+        
+        rules = self.session.exec(query).all()
+        
+        # Filter rules based on conditions
         applicable_rules = []
-        booking_data = {
-            "service_type": service_type,
-            "start_date": start_date,
-            "base_price": base_price,
-            "pax_count": pax_count,
-        }
-
-        for rule in all_rules:
-            if rule.can_apply_to_booking(booking_data):
+        for rule in rules:
+            if self._rule_matches_context(rule, context):
                 applicable_rules.append(rule)
-
-                # If rule is not combinable, stop here
-                if not rule.is_combinable:
-                    break
-
-        return applicable_rules
-
-    async def create_pricing_rule(self, rule_data: Dict[str, Any]) -> PricingRule:
-        """Create a new pricing rule"""
-        rule = PricingRule(**rule_data)
-        rule.set_conditions_dict(rule_data["conditions"])
-
-        self.session.add(rule)
-        self.session.commit()
-        self.session.refresh(rule)
-
-        return rule
-
-    async def update_pricing_rule(
-        self, rule_id: uuid.UUID, rule_data: Dict[str, Any]
-    ) -> PricingRule:
-        """Update an existing pricing rule"""
-        statement = select(PricingRule).where(PricingRule.id == rule_id)
-        rule = self.session.exec(statement).first()
-
-        if not rule:
-            from fastapi import HTTPException, status
-
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Pricing rule not found"
-            )
-
-        # Update fields
-        for field, value in rule_data.items():
-            if field == "conditions":
-                rule.set_conditions_dict(value)
+                logger.debug(f"Rule '{rule.name}' is applicable")
             else:
-                setattr(rule, field, value)
-
-        self.session.add(rule)
-        self.session.commit()
-        self.session.refresh(rule)
-
-        return rule
-
-    async def validate_promo_code(
-        self, promo_code: str, booking_data: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Validate a promo code and return discount information"""
-        statement = select(PricingRule).where(
-            PricingRule.code == promo_code, PricingRule.is_active == True
+                logger.debug(f"Rule '{rule.name}' conditions not met")
+        
+        logger.debug(f"Found {len(applicable_rules)} applicable rules out of {len(rules)} total")
+        return applicable_rules
+    
+    def _rule_matches_context(self, rule: PricingRule, context: PricingContext) -> bool:
+        """Check if a pricing rule matches the given context"""
+        conditions = rule.get_conditions_dict()
+        
+        # Check passenger count
+        if conditions.get('min_pax_count') and context.pax_count < conditions['min_pax_count']:
+            return False
+        if conditions.get('max_pax_count') and context.pax_count > conditions['max_pax_count']:
+            return False
+        
+        # Check service types
+        valid_service_types = conditions.get('valid_service_types')
+        if valid_service_types and context.service_type not in valid_service_types:
+            return False
+        
+        # Check customer-specific rules
+        valid_customers = conditions.get('valid_customers')
+        if valid_customers and context.customer_id:
+            if str(context.customer_id) not in [str(c) for c in valid_customers]:
+                return False
+        
+        # Check advance booking days
+        if context.start_date and conditions.get('min_advance_days'):
+            advance_days = (context.start_date - date.today()).days
+            if advance_days < conditions['min_advance_days']:
+                return False
+        
+        # Check booking value
+        if conditions.get('min_booking_value') and context.base_price < conditions['min_booking_value']:
+            return False
+        if conditions.get('max_booking_value') and context.base_price > conditions['max_booking_value']:
+            return False
+        
+        return True
+    
+    def _calculate_rule_discount(self, rule: PricingRule, context: PricingContext) -> Decimal:
+        """Calculate discount amount for a specific rule"""
+        if rule.discount_type == "Percentage":
+            if rule.discount_percentage:
+                return context.base_price * (rule.discount_percentage / 100)
+        elif rule.discount_type == "Fixed Amount":
+            if rule.discount_amount:
+                return min(rule.discount_amount, context.base_price)
+        elif rule.discount_type == "Group Discount":
+            # Group discount based on passenger count
+            if context.pax_count >= 10 and rule.discount_percentage:
+                return context.base_price * (rule.discount_percentage / 100)
+        elif rule.discount_type == "Early Bird":
+            # Early bird discount based on advance booking
+            if context.start_date:
+                advance_days = (context.start_date - date.today()).days
+                if advance_days >= 30 and rule.discount_percentage:
+                    return context.base_price * (rule.discount_percentage / 100)
+        
+        return Decimal('0.00')
+    
+    async def validate_promo_code(self, promo_code: str, context: PricingContext) -> Optional[PricingRule]:
+        """Validate and return pricing rule for promo code"""
+        if not promo_code:
+            return None
+        
+        query = select(PricingRule).where(
+            and_(
+                PricingRule.code == promo_code.upper(),
+                PricingRule.is_active == True,
+                PricingRule.valid_from <= context.start_date,
+                PricingRule.valid_until >= context.start_date
+            )
         )
-
-        rule = self.session.exec(statement).first()
-
+        
+        rule = self.session.exec(query).first()
+        
         if not rule:
-            return {"valid": False, "message": "Invalid promo code"}
-
-        if not rule.is_valid_now():
-            return {
-                "valid": False,
-                "message": "Promo code has expired or reached usage limit",
-            }
-
-        if not rule.can_apply_to_booking(booking_data):
-            return {
-                "valid": False,
-                "message": "Promo code is not applicable to this booking",
-            }
-
-        discount_amount = rule.calculate_discount(
-            Decimal(str(booking_data["base_price"])), booking_data["pax_count"]
-        )
-
-        return {
-            "valid": True,
-            "rule_name": rule.name,
-            "discount_type": rule.discount_type.value,
-            "discount_amount": float(discount_amount),
-            "message": f"Promo code applied: {rule.name}",
-        }
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired promo code"
+            )
+        
+        # Check usage limits
+        if rule.max_uses and rule.current_uses >= rule.max_uses:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Promo code usage limit exceeded"
+            )
+        
+        # Check if rule matches context
+        if not self._rule_matches_context(rule, context):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Promo code not applicable to this booking"
+            )
+        
+        return rule

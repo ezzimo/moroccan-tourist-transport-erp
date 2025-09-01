@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     allowed_origins: list[str]
     environment: str
     debug: bool
+    
+    # JWT Configuration
+    jwt_audience: str = "mtterp"
+    jwt_issuer: str = "auth-service"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

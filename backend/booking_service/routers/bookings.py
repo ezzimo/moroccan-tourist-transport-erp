@@ -31,13 +31,15 @@ router = APIRouter(prefix="/bookings", tags=["Booking Management"])
 @router.post("/", response_model=BookingResponse)
 async def create_booking(
     booking_data: BookingCreate,
-    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(require_permission("booking", "create", "bookings"))
     redis_client: redis.Redis = Depends(get_redis),
     current_user: CurrentUser = Depends(
         require_permission("booking", "create", "bookings")
     ),
 ):
     """Create a new booking"""
+    logger.info(f"Booking creation requested by user: {current_user.email}")
+    
     booking_service = BookingService(session, redis_client)
     return await booking_service.create_booking(booking_data, current_user.user_id)
 

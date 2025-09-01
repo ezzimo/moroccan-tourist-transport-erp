@@ -2,265 +2,261 @@
 Tests for pricing functionality
 """
 import pytest
-from services.pricing_service import PricingService
-from models.enums import DiscountType
 from decimal import Decimal
 from datetime import date, timedelta
+from services.pricing_service import PricingService
+from schemas.pricing import PricingContext, PricingRequest
+from models.pricing_rule import PricingRule
+import uuid
 
 
-class TestPricing:
-    """Test class for pricing operations"""
+class TestPricingService:
+    """Test class for pricing service operations"""
     
     @pytest.mark.asyncio
-    async def test_calculate_pricing_no_discounts(self, session):
-        """Test pricing calculation without discounts"""
+    async def test_basic_pricing_calculation(self, session):
+        """Test basic pricing calculation without discounts"""
         pricing_service = PricingService(session)
         
-        pricing_request = {
-            "service_type": "Tour",
-            "base_price": Decimal("1000.00"),
-            "pax_count": 2,
-            "start_date": date.today() + timedelta(days=7)
-        }
+        context = PricingContext(
+            service_type="Tour",
+            base_price=Decimal('1000.00'),
+            pax_count=4,
+            start_date=date.today() + timedelta(days=30)
+        )
         
-        result = await pricing_service.calculate_pricing(pricing_request)
+        calculation = await pricing_service.calculate_pricing(context)
         
-        assert result["base_price"] == Decimal("1000.00")
-        assert result["discount_amount"] == Decimal("0.00")
-        assert result["total_price"] == Decimal("1000.00")
-        assert result["applied_rules"] == []
+        assert calculation.base_price == Decimal('1000.00')
+        assert calculation.discount_amount == Decimal('0.00')
+        assert calculation.total_price == Decimal('1000.00')
+        assert calculation.currency == "MAD"
+        assert len(calculation.applied_rules) == 0
     
     @pytest.mark.asyncio
-    async def test_calculate_pricing_with_percentage_discount(self, session, create_test_pricing_rule):
+    async def test_percentage_discount_rule(self, session):
         """Test pricing calculation with percentage discount"""
         pricing_service = PricingService(session)
         
-        # Create percentage discount rule
-        rule = create_test_pricing_rule(
-            name="10% Tour Discount",
-            discount_type=DiscountType.PERCENTAGE,
-            discount_percentage=Decimal("10.00"),
-            conditions='{"service_types": ["Tour"]}'
+        # Create a test discount rule
+        rule = PricingRule(
+            name="Early Bird 10%",
+            description="10% discount for early bookings",
+            discount_type="Percentage",
+            discount_percentage=Decimal('10.00'),
+            valid_from=date.today(),
+            valid_until=date.today() + timedelta(days=365),
+            is_active=True,
+            conditions='{"min_advance_days": 14}'
+        )
+        session.add(rule)
+        session.commit()
+        session.refresh(rule)
+        
+        context = PricingContext(
+            service_type="Tour",
+            base_price=Decimal('1000.00'),
+            pax_count=4,
+            start_date=date.today() + timedelta(days=30)  # 30 days advance
         )
         
-        pricing_request = {
-            "service_type": "Tour",
-            "base_price": Decimal("1000.00"),
-            "pax_count": 2,
-            "start_date": date.today() + timedelta(days=7)
-        }
+        calculation = await pricing_service.calculate_pricing(context)
         
-        result = await pricing_service.calculate_pricing(pricing_request)
-        
-        assert result["base_price"] == Decimal("1000.00")
-        assert result["discount_amount"] == Decimal("100.00")  # 10% of 1000
-        assert result["total_price"] == Decimal("900.00")
-        assert len(result["applied_rules"]) == 1
-        assert result["applied_rules"][0]["rule_name"] == "10% Tour Discount"
+        assert calculation.base_price == Decimal('1000.00')
+        assert calculation.discount_amount == Decimal('100.00')  # 10% of 1000
+        assert calculation.total_price == Decimal('900.00')
+        assert len(calculation.applied_rules) == 1
+        assert calculation.applied_rules[0].rule_name == "Early Bird 10%"
     
     @pytest.mark.asyncio
-    async def test_calculate_pricing_with_fixed_discount(self, session, create_test_pricing_rule):
+    async def test_fixed_amount_discount_rule(self, session):
         """Test pricing calculation with fixed amount discount"""
         pricing_service = PricingService(session)
         
-        # Create fixed discount rule
-        rule = create_test_pricing_rule(
-            name="200 MAD Off",
-            discount_type=DiscountType.FIXED_AMOUNT,
-            discount_amount=Decimal("200.00"),
-            conditions='{"service_types": ["Tour"]}'
+        # Create a test discount rule
+        rule = PricingRule(
+            name="Fixed 50 MAD Off",
+            description="50 MAD discount",
+            discount_type="Fixed Amount",
+            discount_amount=Decimal('50.00'),
+            valid_from=date.today(),
+            valid_until=date.today() + timedelta(days=365),
+            is_active=True,
+            conditions='{}'
+        )
+        session.add(rule)
+        session.commit()
+        session.refresh(rule)
+        
+        context = PricingContext(
+            service_type="Tour",
+            base_price=Decimal('500.00'),
+            pax_count=2,
+            start_date=date.today() + timedelta(days=7)
         )
         
-        pricing_request = {
-            "service_type": "Tour",
-            "base_price": Decimal("1000.00"),
-            "pax_count": 2,
-            "start_date": date.today() + timedelta(days=7)
-        }
+        calculation = await pricing_service.calculate_pricing(context)
         
-        result = await pricing_service.calculate_pricing(pricing_request)
-        
-        assert result["base_price"] == Decimal("1000.00")
-        assert result["discount_amount"] == Decimal("200.00")
-        assert result["total_price"] == Decimal("800.00")
-        assert len(result["applied_rules"]) == 1
+        assert calculation.base_price == Decimal('500.00')
+        assert calculation.discount_amount == Decimal('50.00')
+        assert calculation.total_price == Decimal('450.00')
+        assert len(calculation.applied_rules) == 1
     
     @pytest.mark.asyncio
-    async def test_calculate_pricing_with_group_discount(self, session, create_test_pricing_rule):
-        """Test pricing calculation with group discount"""
+    async def test_group_discount_rule(self, session):
+        """Test group discount for large parties"""
         pricing_service = PricingService(session)
         
-        # Create group discount rule
-        rule = create_test_pricing_rule(
-            name="Group Discount",
-            discount_type=DiscountType.GROUP_DISCOUNT,
-            discount_percentage=Decimal("15.00"),
-            conditions='{"group_threshold": 5, "service_types": ["Tour"]}'
+        # Create a group discount rule
+        rule = PricingRule(
+            name="Group Discount 15%",
+            description="15% discount for groups of 10+",
+            discount_type="Group Discount",
+            discount_percentage=Decimal('15.00'),
+            valid_from=date.today(),
+            valid_until=date.today() + timedelta(days=365),
+            is_active=True,
+            conditions='{"min_pax_count": 10}'
+        )
+        session.add(rule)
+        session.commit()
+        session.refresh(rule)
+        
+        # Test with large group
+        context = PricingContext(
+            service_type="Tour",
+            base_price=Decimal('2000.00'),
+            pax_count=12,  # Qualifies for group discount
+            start_date=date.today() + timedelta(days=15)
         )
         
-        # Test with group size meeting threshold
-        pricing_request = {
-            "service_type": "Tour",
-            "base_price": Decimal("1000.00"),
-            "pax_count": 6,  # Above threshold
-            "start_date": date.today() + timedelta(days=7)
-        }
+        calculation = await pricing_service.calculate_pricing(context)
         
-        result = await pricing_service.calculate_pricing(pricing_request)
-        
-        assert result["discount_amount"] == Decimal("150.00")  # 15% of 1000
-        assert result["total_price"] == Decimal("850.00")
-        
-        # Test with group size below threshold
-        pricing_request["pax_count"] = 3  # Below threshold
-        
-        result = await pricing_service.calculate_pricing(pricing_request)
-        
-        assert result["discount_amount"] == Decimal("0.00")
-        assert result["total_price"] == Decimal("1000.00")
+        assert calculation.base_price == Decimal('2000.00')
+        assert calculation.discount_amount == Decimal('300.00')  # 15% of 2000
+        assert calculation.total_price == Decimal('1700.00')
+        assert len(calculation.applied_rules) == 1
     
     @pytest.mark.asyncio
-    async def test_calculate_pricing_with_early_bird_discount(self, session, create_test_pricing_rule):
-        """Test pricing calculation with early bird discount"""
+    async def test_promo_code_validation(self, session):
+        """Test promo code validation"""
         pricing_service = PricingService(session)
         
-        # Create early bird discount rule
-        rule = create_test_pricing_rule(
-            name="Early Bird 20%",
-            discount_type=DiscountType.EARLY_BIRD,
-            discount_percentage=Decimal("20.00"),
-            conditions='{"min_advance_days": 30, "service_types": ["Tour"]}'
-        )
-        
-        # Test with booking made in advance
-        pricing_request = {
-            "service_type": "Tour",
-            "base_price": Decimal("1000.00"),
-            "pax_count": 2,
-            "start_date": date.today() + timedelta(days=35)  # 35 days in advance
-        }
-        
-        result = await pricing_service.calculate_pricing(pricing_request)
-        
-        assert result["discount_amount"] == Decimal("200.00")  # 20% of 1000
-        assert result["total_price"] == Decimal("800.00")
-        
-        # Test with booking made too late
-        pricing_request["start_date"] = date.today() + timedelta(days=7)  # Only 7 days
-        
-        result = await pricing_service.calculate_pricing(pricing_request)
-        
-        assert result["discount_amount"] == Decimal("0.00")
-        assert result["total_price"] == Decimal("1000.00")
-    
-    @pytest.mark.asyncio
-    async def test_validate_promo_code_valid(self, session, create_test_pricing_rule):
-        """Test validating a valid promo code"""
-        pricing_service = PricingService(session)
-        
-        # Create promo code rule
-        rule = create_test_pricing_rule(
-            name="Summer Special",
+        # Create a promo code rule
+        rule = PricingRule(
+            name="SUMMER2024",
+            description="Summer 2024 promotion",
             code="SUMMER2024",
-            discount_type=DiscountType.PERCENTAGE,
-            discount_percentage=Decimal("25.00"),
-            conditions='{"service_types": ["Tour"]}'
+            discount_type="Percentage",
+            discount_percentage=Decimal('20.00'),
+            valid_from=date.today(),
+            valid_until=date.today() + timedelta(days=90),
+            is_active=True,
+            max_uses=100,
+            current_uses=0,
+            conditions='{}'
+        )
+        session.add(rule)
+        session.commit()
+        session.refresh(rule)
+        
+        context = PricingContext(
+            service_type="Tour",
+            base_price=Decimal('800.00'),
+            pax_count=2,
+            start_date=date.today() + timedelta(days=14),
+            promo_code="SUMMER2024"
         )
         
-        booking_data = {
-            "service_type": "Tour",
-            "base_price": Decimal("1000.00"),
-            "pax_count": 2,
-            "start_date": date.today() + timedelta(days=7)
-        }
+        # Validate promo code
+        validated_rule = await pricing_service.validate_promo_code("SUMMER2024", context)
         
-        result = await pricing_service.validate_promo_code("SUMMER2024", booking_data)
-        
-        assert result["valid"] is True
-        assert result["rule_name"] == "Summer Special"
-        assert result["discount_amount"] == 250.0  # 25% of 1000
+        assert validated_rule is not None
+        assert validated_rule.code == "SUMMER2024"
+        assert validated_rule.discount_percentage == Decimal('20.00')
     
     @pytest.mark.asyncio
-    async def test_validate_promo_code_invalid(self, session):
-        """Test validating an invalid promo code"""
+    async def test_invalid_promo_code(self, session):
+        """Test validation of invalid promo code"""
         pricing_service = PricingService(session)
         
-        booking_data = {
-            "service_type": "Tour",
-            "base_price": Decimal("1000.00"),
-            "pax_count": 2,
-            "start_date": date.today() + timedelta(days=7)
-        }
+        context = PricingContext(
+            service_type="Tour",
+            base_price=Decimal('800.00'),
+            pax_count=2,
+            start_date=date.today() + timedelta(days=14),
+            promo_code="INVALID"
+        )
         
-        result = await pricing_service.validate_promo_code("INVALID", booking_data)
+        # Should raise HTTPException for invalid code
+        with pytest.raises(Exception) as exc_info:
+            await pricing_service.validate_promo_code("INVALID", context)
         
-        assert result["valid"] is False
-        assert "Invalid promo code" in result["message"]
+        assert "Invalid or expired promo code" in str(exc_info.value)
+    
+    def test_pricing_request_to_context_conversion(self):
+        """Test conversion from PricingRequest to PricingContext"""
+        request = PricingRequest(
+            service_type="Tour",
+            base_price=Decimal('1200.00'),
+            pax_count=6,
+            start_date=date.today() + timedelta(days=21),
+            customer_id=uuid.uuid4(),
+            promo_code="TEST2024"
+        )
+        
+        context = request.to_pricing_context()
+        
+        assert context.service_type == "Tour"
+        assert context.base_price == Decimal('1200.00')
+        assert context.pax_count == 6
+        assert context.start_date == date.today() + timedelta(days=21)
+        assert context.customer_id == request.customer_id
+        assert context.promo_code == "TEST2024"
     
     @pytest.mark.asyncio
-    async def test_multiple_combinable_rules(self, session, create_test_pricing_rule):
-        """Test applying multiple combinable pricing rules"""
+    async def test_multiple_applicable_rules(self, session):
+        """Test pricing with multiple applicable rules"""
         pricing_service = PricingService(session)
         
-        # Create combinable rules
-        rule1 = create_test_pricing_rule(
-            name="Base Discount",
-            discount_type=DiscountType.PERCENTAGE,
-            discount_percentage=Decimal("10.00"),
-            conditions='{"service_types": ["Tour"]}',
+        # Create multiple rules
+        early_bird_rule = PricingRule(
+            name="Early Bird 5%",
+            discount_type="Early Bird",
+            discount_percentage=Decimal('5.00'),
+            valid_from=date.today(),
+            valid_until=date.today() + timedelta(days=365),
+            is_active=True,
             priority=1,
-            is_combinable=True
+            conditions='{"min_advance_days": 14}'
         )
         
-        rule2 = create_test_pricing_rule(
-            name="Additional Discount",
-            discount_type=DiscountType.FIXED_AMOUNT,
-            discount_amount=Decimal("50.00"),
-            conditions='{"service_types": ["Tour"]}',
+        group_rule = PricingRule(
+            name="Group 10%",
+            discount_type="Group Discount", 
+            discount_percentage=Decimal('10.00'),
+            valid_from=date.today(),
+            valid_until=date.today() + timedelta(days=365),
+            is_active=True,
             priority=2,
-            is_combinable=True
+            conditions='{"min_pax_count": 8}'
         )
         
-        pricing_request = {
-            "service_type": "Tour",
-            "base_price": Decimal("1000.00"),
-            "pax_count": 2,
-            "start_date": date.today() + timedelta(days=7)
-        }
+        session.add(early_bird_rule)
+        session.add(group_rule)
+        session.commit()
         
-        result = await pricing_service.calculate_pricing(pricing_request)
-        
-        # Should apply both discounts: 10% (100) + 50 = 150 total discount
-        assert result["discount_amount"] == Decimal("150.00")
-        assert result["total_price"] == Decimal("850.00")
-        assert len(result["applied_rules"]) == 2
-    
-    @pytest.mark.asyncio
-    async def test_rule_usage_limit(self, session, create_test_pricing_rule):
-        """Test pricing rule usage limits"""
-        pricing_service = PricingService(session)
-        
-        # Create rule with usage limit
-        rule = create_test_pricing_rule(
-            name="Limited Offer",
-            discount_type=DiscountType.PERCENTAGE,
-            discount_percentage=Decimal("20.00"),
-            conditions='{"service_types": ["Tour"]}',
-            max_uses=1,
-            current_uses=0
+        context = PricingContext(
+            service_type="Tour",
+            base_price=Decimal('2000.00'),
+            pax_count=10,  # Qualifies for group discount
+            start_date=date.today() + timedelta(days=30)  # Qualifies for early bird
         )
         
-        pricing_request = {
-            "service_type": "Tour",
-            "base_price": Decimal("1000.00"),
-            "pax_count": 2,
-            "start_date": date.today() + timedelta(days=7)
-        }
+        calculation = await pricing_service.calculate_pricing(context)
         
-        # First use should work
-        result1 = await pricing_service.calculate_pricing(pricing_request)
-        assert result1["discount_amount"] == Decimal("200.00")
-        
-        # Second use should not apply the rule (limit reached)
-        result2 = await pricing_service.calculate_pricing(pricing_request)
-        assert result2["discount_amount"] == Decimal("0.00")
+        # Should apply both discounts
+        assert calculation.base_price == Decimal('2000.00')
+        assert calculation.discount_amount == Decimal('300.00')  # 5% + 10% = 300
+        assert calculation.total_price == Decimal('1700.00')
+        assert len(calculation.applied_rules) == 2

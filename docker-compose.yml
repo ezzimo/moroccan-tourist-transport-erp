@@ -24,6 +24,9 @@ services:
     - 8000:8000
     env_file:
     - ./backend/app/.env
+    environment:
+      - JWT_AUDIENCE=mtterp
+      - JWT_ISSUER=auth-service
     depends_on:
       db_auth:
         condition: service_healthy
@@ -81,6 +84,11 @@ services:
     - 8002:8002
     env_file:
     - ./backend/booking_service/.env
+    environment:
+      - JWT_AUDIENCE=mtterp
+      - JWT_ISSUER=auth-service
+      - JWT_ALLOWED_AUDIENCES=mtterp,tourist-erp
+      - JWT_DISABLE_AUDIENCE_CHECK=false
     depends_on:
     - db_booking
     networks:
