@@ -1,55 +1,60 @@
 """
-Configuration settings for the booking service
+Configuration settings for the booking & reservation microservice
 """
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, computed_field
-from typing import List, Optional
-from pydantic import Field, field_validator, computed_field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List, Optional
-import json
 import json
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore", populate_by_name=True)
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     
     # Database
     database_url: str = "postgresql://postgres:booking_pass@db_booking:5432/booking_db"
     
     # Redis
-    redis_url: str = "redis://localhost:6379/2"
+    redis_url: str = "redis://redis_auth:6379/2"
     
     # Service Integration
     auth_service_url: str = "http://auth_service:8000"
     crm_service_url: str = "http://crm_service:8001"
     fleet_service_url: str = "http://fleet_service:8004"
     
-    # JWT Configuration (aligned with auth service)
-    jwt_secret_key: str = Field(default="super-secret-key-change-this", alias="JWT_SECRET_KEY")
+    # JWT Configuration
+    jwt_secret_key: str = "super-secret-key-change-this"
+    jwt_algorithm: str = "HS256"
     jwt_audience: str = Field(default="mtterp", alias="JWT_AUDIENCE")
     jwt_issuer: str = Field(default="auth-service", alias="JWT_ISSUER")
-    # Parse JWT allowed audiences with robust handling
-    jwt_allowed_audiences: List[str] = Field(default_factory=list)
-        # Try JSON array first
-        if raw.startswith("[") and raw.endswith("]"):
-            try:
-                arr = json.loads(raw)
-                if isinstance(arr, list):
-                    return [str(x) for x in arr if x]
-            except json.JSONDecodeError:
-                pass
-        
-        # Fallback: comma-separated
-        audiences = [p.strip() for p in raw.split(",") if p.strip()]
-        return audiences if audiences else [self.jwt_audience]
-    jwt_audience: str = "mtterp"
-    jwt_issuer: str = "auth-service"
-    jwt_allowed_audiences_raw: Optional[str] = Field(default=None, alias="JWT_ALLOWED_AUDIENCES")
-    jwt_disable_audience_check: bool = False
+    jwt_allowed_audiences: List[str] = Field(default_factory=list, alias="JWT_ALLOWED_AUDIENCES")
+    jwt_disable_audience_check: bool = Field(default=False, alias="JWT_DISABLE_AUDIENCE_CHECK")
+    
+    @field_validator("jwt_allowed_audiences", mode="before")
+    @classmethod
+    def parse_allowed_audiences(cls, v):
+        """Parse JWT allowed audiences from various formats"""
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [str(x) for x in v]
+        if isinstance(v, str):
+            raw = v.strip()
+            if not raw:
+                return []
+            # Try JSON array first
+            if raw.startswith("[") and raw.endswith("]"):
+                try:
+                    arr = json.loads(raw)
+                    if isinstance(arr, list):
+                        return [str(x) for x in arr]
+                except Exception:
+                    pass
+            # Fallback: comma-separated
+            return [p.strip() for p in raw.split(",") if p.strip()]
+        return []
     
     # CORS
-    allowed_origins: List[str] = Field(default=["http://localhost:3000", "http://localhost:8080"])
+    allowed_origins: List[str] = ["http://localhost:3000", "http://localhost:8080"]
     
     # Environment
     environment: str = "development"
@@ -60,79 +65,12 @@ class Settings(BaseSettings):
     max_page_size: int = 100
     
     # Booking Configuration
-    default_booking_expiry_hours: int = 24
-    max_booking_duration_days: int = 365
+    booking_expiry_hours: int = 24
+    max_advance_booking_days: int = 365
     
-    @field_validator("jwt_allowed_audiences", mode="before")
-    @classmethod
-    def parse_jwt_audiences(cls, v):
-        """Parse JWT audiences from JSON string or comma-separated values"""
-        if not v:
-            return ["mtterp"]  # Default audience
-        
-        if isinstance(v, list):
-            return v
-        
-        if isinstance(v, str):
-            # Try JSON array first
-            if v.strip().startswith('[') and v.strip().endswith(']'):
-                try:
-                    parsed = json.loads(v)
-                    if isinstance(parsed, list):
-                        return parsed
-                except json.JSONDecodeError:
-                    pass
-            
-            # Fall back to comma-separated
-            return [aud.strip() for aud in v.split(',') if aud.strip()]
-        
-        return ["mtterp"]
-    
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
-    
-    @computed_field
-    @property
-    def jwt_allowed_audiences(self) -> List[str]:
-        """Parse JWT_ALLOWED_AUDIENCES from string to list"""
-        if not self.jwt_allowed_audiences_raw:
-            return [self.jwt_audience]  # Default to main audience
-        
-        raw = self.jwt_allowed_audiences_raw.strip()
-        if not raw:
-            return [self.jwt_audience]
-        
-        # Try JSON parse first
-        if raw.startswith('[') and raw.endswith(']'):
-            try:
-                parsed = json.loads(raw)
-                if isinstance(parsed, list):
-                    return [str(item) for item in parsed if item]
-            except json.JSONDecodeError:
-                pass
-        
+    # Pricing
+    default_currency: str = "MAD"
+    tax_rate: float = 20.0
 
-    @field_validator("jwt_allowed_audiences", mode="before")
-    @classmethod
-    def parse_allowed_audiences(cls, v):
-        """Parse JWT allowed audiences from various formats"""
-        if v is None:
-            return []
-        if isinstance(v, list):
-            return [str(x) for x in v]
-        if isinstance(v, str):
-            s = v.strip()
-            if not s:
-                return []
-            # Try JSON array first
-            if s.startswith("[") and s.endswith("]"):
-                try:
-                    arr = json.loads(s)
-                    if isinstance(arr, list):
-                        return [str(x) for x in arr]
-                except json.JSONDecodeError:
-                    pass
-            # Fallback: comma-separated
-            return [p.strip() for p in s.split(",") if p.strip()]
-        return []
 
 settings = Settings()
