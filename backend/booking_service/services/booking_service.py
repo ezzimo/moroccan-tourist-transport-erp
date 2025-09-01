@@ -33,9 +33,9 @@ import httpx
 class BookingService:
     """Service for handling booking operations"""
 
-    def __init__(self, session: Session, redis_client: redis.Redis):
+    def __init__(self, db: Session, redis_client=None):
         self.session = session
-        self.redis = redis_client
+        self.redis = redis_client  # Optional for backward compatibility
         self.pricing_service = PricingService(session)
 
     async def create_booking(

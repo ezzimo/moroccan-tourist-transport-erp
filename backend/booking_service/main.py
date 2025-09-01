@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from config import settings
+from dependencies import get_redis
 from database import create_db_and_tables
 from routers import bookings_router, pricing_router, availability_router, reservation_items_router
 import logging
@@ -70,7 +71,7 @@ async def startup_event():
 async def health_check():
     """Health check endpoint with JWT configuration info"""
     try:
-        from database import get_session
+        from dependencies import get_session, get_redis
         from sqlmodel import text
         
         # Test database connection
@@ -78,11 +79,26 @@ async def health_check():
         db.exec(text("SELECT 1"))
         db.close()
         
+        # Test Redis connection
+        try:
+            redis_client = await get_redis()
+            await redis_client.ping()
+            redis_status = "connected"
+        except Exception as redis_error:
+            redis_status = f"error: {str(redis_error)}"
+        
         return {
             "status": "healthy",
             "service": "booking-microservice",
             "version": "1.0.0",
             "database": "connected",
+            "redis": redis_status,
+            "jwt_config": {
+                "audience": settings.jwt_audience,
+                "allowed_audiences": settings.jwt_allowed_audiences,
+                "issuer": settings.jwt_issuer,
+                "disable_audience_check": settings.jwt_disable_audience_check
+            }
             "jwt_config": {
                 "audience": settings.jwt_audience,
                 "allowed_audiences": settings.jwt_allowed_audiences,
