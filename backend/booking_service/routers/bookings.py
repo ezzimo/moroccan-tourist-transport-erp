@@ -33,10 +33,17 @@ async def create_booking(
     booking_data: BookingCreate,
     current_user: CurrentUser = Depends(require_permission("booking", "create", "bookings"))
     redis_client: redis.Redis = Depends(get_redis),
+        required_permission = f"{service}:{action}:{resource}"
+        
     current_user: CurrentUser = Depends(
+            logger.warning(
+                f"Permission denied - Required: {required_permission}, "
+                f"User: {current_user.email} (ID: {current_user.user_id}), "
+                f"User permissions: {current_user.permissions[:10]}..."  # Log first 10 for brevity
+            )
         require_permission("booking", "create", "bookings")
     ),
-):
+                detail=f"Permission denied: {required_permission}"
     """Create a new booking"""
     logger.info(f"Booking creation requested by user: {current_user.email}")
     

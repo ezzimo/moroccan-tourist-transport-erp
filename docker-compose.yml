@@ -87,7 +87,7 @@ services:
     environment:
       - JWT_AUDIENCE=mtterp
       - JWT_ISSUER=auth-service
-      - JWT_ALLOWED_AUDIENCES=mtterp,tourist-erp
+      - JWT_ALLOWED_AUDIENCES=["mtterp","booking_service"]
       - JWT_DISABLE_AUDIENCE_CHECK=false
     depends_on:
     - db_booking

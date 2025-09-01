@@ -40,8 +40,15 @@ async def verify_jwt_token(token: str) -> Optional[Dict[str, Any]]:
     """Verify JWT token locally with audience validation"""
     try:
         # Determine audience validation
-        verify_aud = not settings.jwt_disable_audience_check
-        options = {"verify_aud": verify_aud}
+        options = {}
+        audience = None
+        
+        if not settings.jwt_disable_audience_check:
+            audience = settings.jwt_allowed_audiences
+            if len(audience) == 1:
+                audience = audience[0]  # Single audience
+        else:
+            options["verify_aud"] = False
         
         # Get expected audiences
         expected_audiences = settings.jwt_allowed_audiences

@@ -2,7 +2,9 @@
 Configuration settings for the booking service
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import field_validator
+from pydantic import Field, computed_field
+from typing import List, Optional
+import json
 from typing import List
 import json
 
@@ -24,7 +26,7 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     jwt_audience: str = "mtterp"
     jwt_issuer: str = "auth-service"
-    jwt_allowed_audiences: List[str] = ["mtterp"]
+    jwt_allowed_audiences_raw: Optional[str] = Field(default=None, alias="JWT_ALLOWED_AUDIENCES")
     jwt_disable_audience_check: bool = False
     
     # CORS
@@ -68,6 +70,29 @@ class Settings(BaseSettings):
         return ["mtterp"]
     
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    
+    @computed_field
+    @property
+    def jwt_allowed_audiences(self) -> List[str]:
+        """Parse JWT_ALLOWED_AUDIENCES from string to list"""
+        if not self.jwt_allowed_audiences_raw:
+            return [self.jwt_audience]  # Default to main audience
+        
+        raw = self.jwt_allowed_audiences_raw.strip()
+        if not raw:
+            return [self.jwt_audience]
+        
+        # Try JSON parse first
+        if raw.startswith('[') and raw.endswith(']'):
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, list):
+                    return [str(item) for item in parsed if item]
+            except json.JSONDecodeError:
+                pass
+        
+        # Fallback to comma-separated
+        return [item.strip() for item in raw.split(',') if item.strip()]
 
 
 settings = Settings()
