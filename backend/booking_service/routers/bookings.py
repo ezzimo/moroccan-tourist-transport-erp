@@ -45,6 +45,8 @@ async def create_booking(
     ),
                 detail=f"Permission denied: {required_permission}"
     """Create a new booking"""
+    logger.info(f"Booking creation requested by {current_user.email}")
+    
     logger.info(f"Booking creation requested by user: {current_user.email}")
     
     booking_service = BookingService(session, redis_client)

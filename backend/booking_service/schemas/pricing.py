@@ -8,20 +8,16 @@ from decimal import Decimal
 import uuid
 
 
-class PricingContext(BaseModel):
-    """Comprehensive pricing context for rule evaluation"""
-    service_type: str = Field(..., description="Type of service being priced")
+class PricingRequest(BaseModel):
+    """Request schema for pricing calculation"""
+    service_type: str = Field(..., description="Type of service (Tour, Transfer, etc.)")
     base_price: Decimal = Field(..., ge=0, description="Base price before discounts")
     pax_count: int = Field(..., ge=1, le=50, description="Number of passengers")
     start_date: date = Field(..., description="Service start date")
     end_date: Optional[date] = Field(None, description="Service end date")
-    customer_id: Optional[uuid.UUID] = Field(None, description="Customer identifier")
-    route_id: Optional[uuid.UUID] = Field(None, description="Route identifier")
+    customer_id: Optional[uuid.UUID] = Field(None, description="Customer ID for loyalty discounts")
     promo_code: Optional[str] = Field(None, max_length=50, description="Promotional code")
-    booking_advance_days: Optional[int] = Field(None, ge=0, description="Days in advance of booking")
-    customer_loyalty_tier: Optional[str] = Field(None, description="Customer loyalty status")
-    season: Optional[str] = Field(None, description="Seasonal pricing period")
-    day_of_week: Optional[str] = Field(None, description="Day of the week")
+    route_id: Optional[uuid.UUID] = Field(None, description="Route ID for route-specific discounts")
     
     @validator('end_date')
     def validate_end_date(cls, v, values):
@@ -29,25 +25,7 @@ class PricingContext(BaseModel):
             raise ValueError('End date must be after start date')
         return v
     
-    @validator('service_type')
-    def validate_service_type(cls, v):
-        allowed_types = ['Tour', 'Transfer', 'Custom Package', 'Accommodation', 'Activity']
-        if v not in allowed_types:
-            raise ValueError(f'Service type must be one of: {", ".join(allowed_types)}')
-        return v
-
-
-class PricingRequest(BaseModel):
-    """Request schema for pricing calculation"""
-    service_type: str = Field(..., description="Type of service")
-    base_price: Decimal = Field(..., ge=0, description="Base price")
-    pax_count: int = Field(..., ge=1, le=50, description="Number of passengers")
-    start_date: date = Field(..., description="Start date")
-    end_date: Optional[date] = None
-    customer_id: Optional[uuid.UUID] = None
-    promo_code: Optional[str] = Field(None, max_length=50)
-    
-    def to_pricing_context(self) -> PricingContext:
+    def to_pricing_context(self) -> 'PricingContext':
         """Convert to PricingContext for service layer"""
         return PricingContext(
             service_type=self.service_type,
@@ -56,12 +34,30 @@ class PricingRequest(BaseModel):
             start_date=self.start_date,
             end_date=self.end_date,
             customer_id=self.customer_id,
-            promo_code=self.promo_code
+            promo_code=self.promo_code,
+            route_id=self.route_id
         )
 
 
+class PricingContext(BaseModel):
+    """Internal context for pricing calculations"""
+    service_type: str
+    base_price: Decimal
+    pax_count: int
+    start_date: date
+    end_date: Optional[date] = None
+    customer_id: Optional[uuid.UUID] = None
+    promo_code: Optional[str] = None
+    route_id: Optional[uuid.UUID] = None
+    
+    @property
+    def party_size(self) -> int:
+        """Alias for pax_count for backward compatibility"""
+        return self.pax_count
+
+
 class AppliedRule(BaseModel):
-    """Applied pricing rule information"""
+    """Schema for applied pricing rule"""
     rule_id: uuid.UUID
     rule_name: str
     discount_type: str
@@ -70,52 +66,34 @@ class AppliedRule(BaseModel):
 
 
 class PricingCalculation(BaseModel):
-    """Pricing calculation result"""
+    """Response schema for pricing calculation"""
     base_price: Decimal
-    discount_amount: Decimal = Field(default=Decimal('0.00'))
+    discount_amount: Decimal = Field(default=Decimal('0'))
     total_price: Decimal
     applied_rules: List[AppliedRule] = Field(default_factory=list)
     currency: str = Field(default="MAD")
-    calculation_details: Optional[Dict[str, Any]] = Field(default_factory=dict)
     
     @validator('total_price')
     def validate_total_price(cls, v, values):
-        if 'base_price' in values and 'discount_amount' in values:
-            expected_total = values['base_price'] - values['discount_amount']
-            if abs(v - expected_total) > Decimal('0.01'):  # Allow for rounding
-                raise ValueError('Total price must equal base price minus discount amount')
+        if v < 0:
+            raise ValueError('Total price cannot be negative')
         return v
 
 
-class PricingRuleConditions(BaseModel):
-    """Conditions for pricing rule application"""
-    min_pax_count: Optional[int] = None
-    max_pax_count: Optional[int] = None
-    min_advance_days: Optional[int] = None
-    max_advance_days: Optional[int] = None
-    valid_service_types: Optional[List[str]] = None
-    valid_routes: Optional[List[uuid.UUID]] = None
-    valid_customers: Optional[List[uuid.UUID]] = None
-    valid_loyalty_tiers: Optional[List[str]] = None
-    valid_seasons: Optional[List[str]] = None
-    valid_days_of_week: Optional[List[str]] = None
-    min_booking_value: Optional[Decimal] = None
-    max_booking_value: Optional[Decimal] = None
+class PromoCodeValidation(BaseModel):
+    """Schema for promo code validation"""
+    promo_code: str = Field(..., max_length=50)
+    service_type: str
+    base_price: Decimal = Field(..., ge=0)
+    pax_count: int = Field(..., ge=1)
+    start_date: date
+    customer_id: Optional[uuid.UUID] = None
 
 
-class PricingRuleCreate(BaseModel):
-    """Schema for creating pricing rules"""
-    name: str = Field(..., max_length=255)
-    description: Optional[str] = Field(None, max_length=1000)
-    code: Optional[str] = Field(None, max_length=50)
-    discount_type: str = Field(..., description="Type of discount")
-    discount_percentage: Optional[Decimal] = Field(None, ge=0, le=100)
-    discount_amount: Optional[Decimal] = Field(None, ge=0)
-    conditions: PricingRuleConditions = Field(default_factory=PricingRuleConditions)
-    valid_from: date
-    valid_until: date
-    max_uses: Optional[int] = Field(None, ge=0)
-    max_uses_per_customer: int = Field(default=1, ge=0)
-    priority: int = Field(default=0)
-    is_active: bool = Field(default=True)
-    is_combinable: bool = Field(default=False)
+class PromoCodeResponse(BaseModel):
+    """Response schema for promo code validation"""
+    valid: bool
+    discount_amount: Optional[Decimal] = None
+    discount_percentage: Optional[Decimal] = None
+    message: Optional[str] = None
+    rule_name: Optional[str] = None

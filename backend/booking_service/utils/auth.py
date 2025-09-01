@@ -4,6 +4,7 @@ Authentication utilities for booking service
 from fastapi import Depends, HTTPException, status, Security, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
+from jose.exceptions import JWTClaimsError
 from config import settings
 from typing import Optional, Dict, Any, List
 import httpx
@@ -25,83 +26,87 @@ class CurrentUser:
     def has_permission(self, service_name: str, action: str, resource: str = "*") -> bool:
         """Check if user has specific permission"""
         permission_variants = [
-            f"{service_name}:{action}:{resource}",       # Exact match
-            f"{service_name}:{action}:all",               # Allow if resource is 'all'
-            f"{service_name}:{action}:*",                 # Wildcard resource
-            f"{service_name}:*:{resource}",               # Wildcard action
-            f"{service_name}:*:*",                        # Full service access
-            f"*:*:*"                                      # Super admin
+            f"{service_name}:{action}:{resource}",
+            f"{service_name}:{action}:*",
+            f"{service_name}:*:{resource}",
+            f"{service_name}:*:*",
+            "*:*:*"
         ]
-        
         return any(p in self.permissions for p in permission_variants)
 
 
-async def verify_jwt_token(token: str) -> Optional[Dict[str, Any]]:
-    """Verify JWT token locally with audience validation"""
+def verify_jwt_token(token: str) -> Optional[Dict[str, Any]]:
+    """Verify JWT token with audience validation"""
     try:
-        # Determine audience validation
-        options = {}
-        audience = None
+        # Get allowed audiences
+        allowed_audiences = settings.jwt_allowed_audiences
         
-        if not settings.jwt_disable_audience_check:
-            audience = settings.jwt_allowed_audiences
-            if len(audience) == 1:
-                audience = audience[0]  # Single audience
-        else:
-            options["verify_aud"] = False
+        if settings.jwt_disable_audience_check:
+            # Decode without audience verification
+            payload = jwt.decode(
+                token,
+                settings.jwt_secret_key,
+                algorithms=[settings.jwt_algorithm],
+                options={"verify_aud": False},
+                issuer=settings.jwt_issuer
+            )
+            logger.debug(f"JWT decoded without audience check for user: {payload.get('email', 'unknown')}")
+            return payload
         
-        # Get expected audiences
-        expected_audiences = settings.jwt_allowed_audiences
-        audience = expected_audiences[0] if expected_audiences else settings.jwt_audience
+        # Try each allowed audience
+        last_error = None
+        for audience in allowed_audiences:
+            try:
+                payload = jwt.decode(
+                    token,
+                    settings.jwt_secret_key,
+                    algorithms=[settings.jwt_algorithm],
+                    audience=audience,
+                    issuer=settings.jwt_issuer
+                )
+                logger.debug(f"JWT verified with audience '{audience}' for user: {payload.get('email', 'unknown')}")
+                return payload
+            except JWTClaimsError as e:
+                last_error = e
+                continue
+            except JWTError as e:
+                last_error = e
+                break
         
-        logger.debug(f"Verifying JWT with audience={audience}, verify_aud={verify_aud}")
+        if last_error:
+            logger.warning(f"JWT verification failed: {last_error}")
+        return None
         
-        payload = jwt.decode(
-            token,
-            settings.secret_key,
-            algorithms=[settings.algorithm],
-            audience=audience if verify_aud else None,
-            issuer=settings.jwt_issuer if verify_aud else None,
-            options=options
-        )
-        
-        # Additional audience check if multiple audiences allowed
-        if verify_aud and len(expected_audiences) > 1:
-            token_aud = payload.get('aud')
-            if token_aud not in expected_audiences:
-                logger.warning(f"Token audience '{token_aud}' not in allowed audiences {expected_audiences}")
-                return None
-        
-        logger.debug(f"Local JWT verification successful for user: {payload.get('email', 'unknown')}")
-        return payload
-        
-    except JWTError as e:
-        logger.debug(f"Local JWT verification failed: {e}")
+    except Exception as e:
+        logger.error(f"JWT verification error: {e}")
         return None
 
 
-async def verify_auth_token_remote(token: str) -> Optional[Dict[str, Any]]:
-    """Verify token with auth service as fallback"""
+async def verify_auth_token(token: str) -> Optional[Dict[str, Any]]:
+    """Verify token with local JWT verification and remote fallback"""
+    # First try local JWT verification
+    payload = verify_jwt_token(token)
+    if payload:
+        logger.debug(f"Local JWT verification successful: {payload.get('email', 'unknown')}")
+        return payload
+    
+    # Fallback to remote auth service verification
     try:
-        logger.debug(f"Calling auth service at: {settings.auth_service_url}/api/v1/auth/me")
+        logger.debug(f"Local JWT failed, trying remote auth service: {settings.auth_service_url}")
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{settings.auth_service_url}/api/v1/auth/me",
                 headers={"Authorization": f"Bearer {token}"},
-                timeout=10.0
+                timeout=5.0
             )
-            
-            logger.debug(f"Auth service response status: {response.status_code}")
-            
             if response.status_code == 200:
                 user_data = response.json()
-                logger.debug(f"Auth service returned user: {user_data.get('email', 'unknown')}")
+                logger.debug(f"Remote auth verification successful: {user_data.get('email', 'unknown')}")
                 return user_data
             else:
-                logger.warning(f"Auth service error: {response.status_code} - {response.text}")
-                
+                logger.warning(f"Remote auth service returned {response.status_code}: {response.text}")
     except Exception as e:
-        logger.error(f"Error calling auth service: {e}")
+        logger.error(f"Remote auth service error: {e}")
     
     return None
 
@@ -110,7 +115,7 @@ async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Security(security)
 ) -> CurrentUser:
-    """Get current authenticated user with principal population"""
+    """Get current authenticated user and populate request state"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -121,38 +126,46 @@ async def get_current_user(
         raise credentials_exception
     
     token = credentials.credentials
-    user_data = None
-    
-    # Try local JWT verification first
-    jwt_payload = await verify_jwt_token(token)
-    if jwt_payload:
-        # For local JWT, we need to get full user data from auth service
-        user_data = await verify_auth_token_remote(token)
-    else:
-        # If local verification fails, try remote verification
-        user_data = await verify_auth_token_remote(token)
+    user_data = await verify_auth_token(token)
     
     if not user_data:
         raise credentials_exception
     
     try:
-        # Extract user information and populate principal
-        current_user = CurrentUser(
-            user_id=uuid.UUID(user_data["id"]),
-            email=user_data["email"],
-            full_name=user_data.get("full_name", ""),
-            permissions=user_data.get("permissions", [])
-        )
+        # Handle both JWT payload and auth service response formats
+        if "permissions" in user_data:
+            # Response from auth service /me endpoint
+            current_user = CurrentUser(
+                user_id=uuid.UUID(user_data["id"]),
+                email=user_data["email"],
+                full_name=user_data.get("full_name", ""),
+                permissions=user_data["permissions"]
+            )
+        else:
+            # JWT payload - need to get permissions from auth service
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    f"{settings.auth_service_url}/api/v1/auth/permissions",
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=5.0
+                )
+                if response.status_code == 200:
+                    permissions_data = response.json()
+                    current_user = CurrentUser(
+                        user_id=uuid.UUID(user_data["sub"]),
+                        email=user_data["email"],
+                        full_name=user_data.get("full_name", ""),
+                        permissions=permissions_data["permissions"]
+                    )
+                else:
+                    raise credentials_exception
         
         # Populate request state for downstream use
         request.state.user = current_user
-        
-        logger.debug(f"Principal populated for user: {current_user.email}")
         return current_user
         
-    except (KeyError, ValueError) as e:
-        logger.error(f"Error extracting user data: {e}")
-        logger.error(f"User data received: {user_data}")
+    except (KeyError, ValueError, TypeError) as e:
+        logger.error(f"Error processing user data: {e}, data: {user_data}")
         raise credentials_exception
 
 
@@ -168,10 +181,9 @@ def require_permission(service_name: str, action: str, resource: str = "*"):
             # Enhanced logging before 403
             logger.warning(
                 f"Permission denied - Required: {required_permission}, "
-                f"User: {current_user.email} (ID: {current_user.user_id}), "
-                f"User permissions: {current_user.permissions[:10]}..."  # Log first 10 permissions
+                f"User: {current_user.email} ({current_user.user_id}), "
+                f"User permissions (first 10): {current_user.permissions[:10]}"
             )
-            
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Permission denied: {required_permission}"

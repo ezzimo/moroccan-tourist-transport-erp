@@ -4,12 +4,16 @@ Configuration settings for the booking service
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, computed_field
 from typing import List, Optional
+from pydantic import Field, field_validator, computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from typing import List, Optional
 import json
-from typing import List
 import json
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", populate_by_name=True)
+    
     # Database
     database_url: str = "postgresql://postgres:booking_pass@db_booking:5432/booking_db"
     
@@ -22,15 +26,51 @@ class Settings(BaseSettings):
     fleet_service_url: str = "http://fleet_service:8004"
     
     # JWT Configuration (aligned with auth service)
-    secret_key: str = "super-secret-key-change-this"
-    algorithm: str = "HS256"
+    jwt_secret_key: str = Field(default="super-secret-key-change-this", alias="JWT_SECRET_KEY")
+    jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
+    jwt_audience: str = Field(default="mtterp", alias="JWT_AUDIENCE")
+    jwt_issuer: str = Field(default="auth-service", alias="JWT_ISSUER")
+    
+    # Raw string for flexible parsing
+    jwt_allowed_audiences_raw: Optional[str] = Field(default=None, alias="JWT_ALLOWED_AUDIENCES")
+    jwt_disable_audience_check: bool = Field(default=False, alias="JWT_DISABLE_AUDIENCE_CHECK")
+    
+    @field_validator("jwt_allowed_audiences_raw", mode="before")
+    @classmethod
+    def validate_audiences_raw(cls, v):
+        # Keep as string for computed_field processing
+        return v
+    
+    @computed_field
+    @property
+    def jwt_allowed_audiences(self) -> List[str]:
+        """Parse JWT_ALLOWED_AUDIENCES from JSON array or CSV format"""
+        if not self.jwt_allowed_audiences_raw:
+            return [self.jwt_audience]
+        
+        raw = self.jwt_allowed_audiences_raw.strip()
+        if not raw:
+            return [self.jwt_audience]
+        
+        # Try JSON array first
+        if raw.startswith("[") and raw.endswith("]"):
+            try:
+                arr = json.loads(raw)
+                if isinstance(arr, list):
+                    return [str(x) for x in arr if x]
+            except json.JSONDecodeError:
+                pass
+        
+        # Fallback: comma-separated
+        audiences = [p.strip() for p in raw.split(",") if p.strip()]
+        return audiences if audiences else [self.jwt_audience]
     jwt_audience: str = "mtterp"
     jwt_issuer: str = "auth-service"
     jwt_allowed_audiences_raw: Optional[str] = Field(default=None, alias="JWT_ALLOWED_AUDIENCES")
     jwt_disable_audience_check: bool = False
     
     # CORS
-    allowed_origins: List[str] = ["http://localhost:3000", "http://localhost:8080"]
+    allowed_origins: List[str] = Field(default=["http://localhost:3000", "http://localhost:8080"])
     
     # Environment
     environment: str = "development"
@@ -91,8 +131,6 @@ class Settings(BaseSettings):
             except json.JSONDecodeError:
                 pass
         
-        # Fallback to comma-separated
-        return [item.strip() for item in raw.split(',') if item.strip()]
 
 
 settings = Settings()

@@ -85,12 +85,23 @@ services:
     env_file:
     - ./backend/booking_service/.env
     environment:
+      - DATABASE_URL=postgresql://postgres:booking_pass@db_booking:5432/booking_db
+      - REDIS_URL=redis://redis_auth:6379/2
+      - AUTH_SERVICE_URL=http://auth_service:8000
+      - JWT_SECRET_KEY=super-secret-key-change-this
+      - JWT_ALGORITHM=HS256
       - JWT_AUDIENCE=mtterp
       - JWT_ISSUER=auth-service
       - JWT_ALLOWED_AUDIENCES=["mtterp","booking_service"]
       - JWT_DISABLE_AUDIENCE_CHECK=false
     depends_on:
     - db_booking
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
     networks:
     - erp_net
   db_driver:

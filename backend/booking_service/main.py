@@ -63,23 +63,44 @@ async def startup_event():
     """Initialize database and create tables"""
     create_db_and_tables()
     logger.info("Booking service database initialized successfully")
-    logger.info(f"JWT Configuration: audience={settings.jwt_audience}, allowed_audiences={settings.jwt_allowed_audiences}")
 
 
-# Health check
+# Health check with JWT configuration display
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "service": "booking-microservice",
-        "version": "1.0.0",
-        "jwt_config": {
-            "audience": settings.jwt_audience,
-            "allowed_audiences": settings.jwt_allowed_audiences,
-            "audience_check_disabled": settings.jwt_disable_audience_check
+    """Health check endpoint with JWT configuration info"""
+    try:
+        from database import get_session
+        from sqlmodel import text
+        
+        # Test database connection
+        db = next(get_session())
+        db.exec(text("SELECT 1"))
+        db.close()
+        
+        return {
+            "status": "healthy",
+            "service": "booking-microservice",
+            "version": "1.0.0",
+            "database": "connected",
+            "jwt_config": {
+                "audience": settings.jwt_audience,
+                "allowed_audiences": settings.jwt_allowed_audiences,
+                "issuer": settings.jwt_issuer,
+                "audience_check_disabled": settings.jwt_disable_audience_check
+            }
         }
-    }
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "unhealthy",
+                "service": "booking-microservice",
+                "version": "1.0.0",
+                "error": str(e)
+            }
+        )
 
 
 # Include routers
@@ -104,7 +125,7 @@ async def root():
             "Availability checking",
             "Reservation items",
             "Real-time notifications",
-            "Multi-channel booking support"
+            "Multi-currency support"
         ]
     }
 
