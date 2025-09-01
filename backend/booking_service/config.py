@@ -27,31 +27,10 @@ class Settings(BaseSettings):
     
     # JWT Configuration (aligned with auth service)
     jwt_secret_key: str = Field(default="super-secret-key-change-this", alias="JWT_SECRET_KEY")
-    jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     jwt_audience: str = Field(default="mtterp", alias="JWT_AUDIENCE")
     jwt_issuer: str = Field(default="auth-service", alias="JWT_ISSUER")
-    
-    # Raw string for flexible parsing
-    jwt_allowed_audiences_raw: Optional[str] = Field(default=None, alias="JWT_ALLOWED_AUDIENCES")
-    jwt_disable_audience_check: bool = Field(default=False, alias="JWT_DISABLE_AUDIENCE_CHECK")
-    
-    @field_validator("jwt_allowed_audiences_raw", mode="before")
-    @classmethod
-    def validate_audiences_raw(cls, v):
-        # Keep as string for computed_field processing
-        return v
-    
-    @computed_field
-    @property
-    def jwt_allowed_audiences(self) -> List[str]:
-        """Parse JWT_ALLOWED_AUDIENCES from JSON array or CSV format"""
-        if not self.jwt_allowed_audiences_raw:
-            return [self.jwt_audience]
-        
-        raw = self.jwt_allowed_audiences_raw.strip()
-        if not raw:
-            return [self.jwt_audience]
-        
+    # Parse JWT allowed audiences with robust handling
+    jwt_allowed_audiences: List[str] = Field(default_factory=list)
         # Try JSON array first
         if raw.startswith("[") and raw.endswith("]"):
             try:
@@ -132,5 +111,28 @@ class Settings(BaseSettings):
                 pass
         
 
+    @field_validator("jwt_allowed_audiences", mode="before")
+    @classmethod
+    def parse_allowed_audiences(cls, v):
+        """Parse JWT allowed audiences from various formats"""
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return [str(x) for x in v]
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return []
+            # Try JSON array first
+            if s.startswith("[") and s.endswith("]"):
+                try:
+                    arr = json.loads(s)
+                    if isinstance(arr, list):
+                        return [str(x) for x in arr]
+                except json.JSONDecodeError:
+                    pass
+            # Fallback: comma-separated
+            return [p.strip() for p in s.split(",") if p.strip()]
+        return []
 
 settings = Settings()
