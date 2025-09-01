@@ -1,265 +1,206 @@
 """
-Pricing service with fixed ORM attribute access
+Pricing service with safe attribute access and no ORM subscripting
 """
 import logging
+from decimal import Decimal, ROUND_HALF_UP
 from typing import List
 from sqlmodel import Session, select, and_
 from fastapi import HTTPException, status
-from datetime import date, datetime
-from decimal import Decimal
+from datetime import date
 
-from models.pricing_rule import PricingRule, DiscountType
-from schemas.pricing import PricingRequest, PricingCalculation, AppliedRule
+from models.pricing_rule import PricingRule, RuleType
+from schemas.pricing import PricingRequest, PricingResponse, AppliedRule
 
 logger = logging.getLogger(__name__)
 
 
 class PricingService:
-    """Service for handling pricing calculations"""
+    """Service for pricing calculations using safe attribute access"""
     
     def __init__(self, session: Session):
         self.session = session
 
-    async def get_applicable_rules(
-        self, 
-        service_type: str, 
-        pax_count: int, 
-        start_date: date,
-        base_price: float,
-        customer_id: str = None
-    ) -> List[PricingRule]:
-        """Get applicable pricing rules using attribute access only"""
-        
-        # Build conditions using attribute access
-        conditions = [
-            PricingRule.is_active == True,
-            PricingRule.valid_from <= date.today(),
-            PricingRule.valid_until >= date.today(),
-        ]
-        
-        # Service type filter
-        if service_type:
-            conditions.append(
-                (PricingRule.service_type.is_(None)) | 
-                (PricingRule.service_type == service_type)
-            )
-        
-        # Passenger count filters
-        conditions.append(
-            (PricingRule.min_pax.is_(None)) | 
-            (PricingRule.min_pax <= pax_count)
-        )
-        conditions.append(
-            (PricingRule.max_pax.is_(None)) | 
-            (PricingRule.max_pax >= pax_count)
-        )
-        
-        # Amount filters
-        conditions.append(
-            (PricingRule.min_amount.is_(None)) | 
-            (PricingRule.min_amount <= base_price)
-        )
-        conditions.append(
-            (PricingRule.max_amount.is_(None)) | 
-            (PricingRule.max_amount >= base_price)
-        )
-        
-        # Date range filters
-        if start_date:
-            conditions.append(
-                (PricingRule.start_date_from.is_(None)) | 
-                (PricingRule.start_date_from <= start_date)
-            )
-            conditions.append(
-                (PricingRule.start_date_to.is_(None)) | 
-                (PricingRule.start_date_to >= start_date)
-            )
-        
-        # Usage limits
-        conditions.append(
-            (PricingRule.max_uses.is_(None)) | 
-            (PricingRule.current_uses < PricingRule.max_uses)
-        )
-        
-        stmt = (
-            select(PricingRule)
-            .where(and_(*conditions))
-            .order_by(PricingRule.priority.asc(), PricingRule.created_at.asc())
-        )
-        
-        rules = self.session.exec(stmt).all()
-        logger.info(f"Found {len(rules)} applicable pricing rules")
-        
-        return rules
-
-    async def calculate_pricing(self, request: PricingRequest) -> PricingCalculation:
-        """Calculate pricing with applied rules using attribute access"""
-        
+    async def calculate_pricing(self, req: PricingRequest) -> PricingResponse:
+        """
+        Calculate pricing using pure Python evaluation - no subscripting of SQL expressions
+        """
         logger.info(
-            "Calculating pricing for service_type=%s, base_price=%s, pax_count=%s",
-            request.service_type, request.base_price, request.pax_count
+            "Calculating pricing for service_type=%s, base_price=%s, pax_count=%s, start_date=%s",
+            req.service_type, req.base_price, req.pax_count, req.start_date
         )
         
-        # Validate input
-        if request.base_price < 0:
+        # Input validation
+        if req.base_price < 0:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Base price must be non-negative"
+                detail="Base price cannot be negative"
             )
-        
-        if request.pax_count < 1:
+        if req.pax_count < 1:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Passenger count must be at least 1"
             )
+
+        # Normalize to Decimal for precise calculations
+        base_price = Decimal(str(req.base_price)).quantize(Decimal("0.01"))
+        pax_count = int(req.pax_count)
         
-        # Get applicable rules
-        try:
-            rules = await self.get_applicable_rules(
-                service_type=request.service_type,
-                pax_count=request.pax_count,
-                start_date=request.start_date,
-                base_price=request.base_price,
-                customer_id=str(request.customer_id) if request.customer_id else None
+        # === PRICING: RULE EVAL START ===
+        # Fetch applicable rules using safe SQL filtering
+        stmt = select(PricingRule).where(
+            and_(
+                PricingRule.is_active == True,
+                # Service type filter - use OR for null (applies to all)
+                (PricingRule.service_type == req.service_type) | (PricingRule.service_type.is_(None))
             )
-        except Exception as e:
-            logger.error(f"Failed to get pricing rules: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to retrieve pricing rules"
-            )
+        ).order_by(PricingRule.priority.asc(), PricingRule.id.asc())
         
-        # Calculate pricing
-        total_price = Decimal(str(request.base_price))
-        total_discount = Decimal('0')
-        applied_rules = []
-        breakdown = []
-        
+        rules: List[PricingRule] = self.session.exec(stmt).all()
+        logger.debug("Found %d potential pricing rules", len(rules))
+
+        # Calculate subtotal
+        subtotal = base_price * pax_count
+        total_discount = Decimal("0.00")
+        total_surcharge = Decimal("0.00")
+        applied_rules: List[AppliedRule] = []
+
+        # Apply rules using safe attribute access only
         for rule in rules:
-            try:
-                # Use attribute access only - no subscripting
-                discount_amount = self._calculate_rule_discount(rule, total_price, request.pax_count)
-                
-                if discount_amount > 0:
-                    total_discount += discount_amount
-                    total_price -= discount_amount
-                    
-                    # Create applied rule info
-                    applied_rule = AppliedRule(
-                        rule_id=rule.id,
-                        rule_name=rule.name,
-                        discount_type=rule.discount_type.value,
-                        discount_amount=float(discount_amount),
-                        description=rule.description
-                    )
-                    applied_rules.append(applied_rule)
-                    
-                    breakdown.append({
-                        "rule_name": rule.name,
-                        "type": rule.discount_type.value,
-                        "amount": float(discount_amount),
-                        "description": rule.description
-                    })
-                    
-                    logger.info(f"Applied rule '{rule.name}': -{discount_amount}")
-                
-            except Exception as e:
-                logger.warning(f"Failed to apply rule '{rule.name}': {e}")
+            # Check applicability using model method (safe attribute access)
+            if not rule.is_applicable(req.service_type, pax_count, req.start_date):
                 continue
+
+            # Calculate effect using safe attribute access
+            effect_amount = self._calculate_rule_effect(rule, subtotal, pax_count)
+            if effect_amount == 0:
+                continue
+
+            # Apply the effect
+            if rule.rule_type in [RuleType.PERCENTAGE_DISCOUNT, RuleType.FLAT_DISCOUNT]:
+                total_discount += effect_amount
+            elif rule.rule_type in [RuleType.SURCHARGE_PERCENTAGE, RuleType.SURCHARGE_FLAT]:
+                total_surcharge += effect_amount
+
+            # Track applied rule
+            applied_rules.append(AppliedRule(
+                rule_id=rule.id,
+                rule_name=rule.name,
+                rule_type=rule.rule_type.value,
+                effect_amount=effect_amount,
+                description=rule.description
+            ))
+
+            logger.debug(
+                "Applied rule %s (%s): %s %s",
+                rule.name, rule.rule_type.value, 
+                "+" if rule.rule_type.value.startswith("surcharge") else "-",
+                effect_amount
+            )
+
+        # Calculate final totals
+        total_discount = max(total_discount, Decimal("0.00"))
+        total_surcharge = max(total_surcharge, Decimal("0.00"))
+        final_total = (subtotal - total_discount + total_surcharge).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
         
-        # Ensure total price doesn't go negative
-        if total_price < 0:
-            total_price = Decimal('0')
-        
-        result = PricingCalculation(
-            base_price=float(request.base_price),
-            discount_amount=float(total_discount),
-            total_price=float(total_price),
-            applied_rules=applied_rules,
-            currency=request.currency or "MAD",
-            breakdown=breakdown
+        # Ensure total is never negative
+        final_total = max(final_total, Decimal("0.00"))
+        # === PRICING: RULE EVAL END ===
+
+        # === PRICING: RETURN DTO ===
+        result = PricingResponse(
+            base_price=base_price,
+            pax_count=pax_count,
+            subtotal=subtotal,
+            discount_amount=total_discount,
+            surcharge_amount=total_surcharge,
+            total_price=final_total,
+            currency=req.currency or "MAD",
+            applied_rules=applied_rules
         )
         
         logger.info(
-            "Pricing calculated: base=%s, discount=%s, total=%s",
-            result.base_price, result.discount_amount, result.total_price
+            "Pricing calculation complete: base=%s, subtotal=%s, discount=%s, surcharge=%s, total=%s",
+            base_price, subtotal, total_discount, total_surcharge, final_total
         )
         
         return result
-    
-    def _calculate_rule_discount(self, rule: PricingRule, current_price: Decimal, pax_count: int) -> Decimal:
-        """Calculate discount for a single rule using attribute access"""
+
+    def _calculate_rule_effect(self, rule: PricingRule, subtotal: Decimal, pax_count: int) -> Decimal:
+        """Calculate the monetary effect of a pricing rule using safe attribute access"""
+        try:
+            if rule.rule_type == RuleType.PERCENTAGE_DISCOUNT:
+                if rule.discount_percentage is not None:
+                    return (subtotal * Decimal(str(rule.discount_percentage)) / Decimal("100")).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    )
+            elif rule.rule_type == RuleType.FLAT_DISCOUNT:
+                if rule.discount_amount is not None:
+                    return Decimal(str(rule.discount_amount)).quantize(Decimal("0.01"))
+            elif rule.rule_type == RuleType.SURCHARGE_PERCENTAGE:
+                if rule.surcharge_percentage is not None:
+                    return (subtotal * Decimal(str(rule.surcharge_percentage)) / Decimal("100")).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    )
+            elif rule.rule_type == RuleType.SURCHARGE_FLAT:
+                if rule.surcharge_amount is not None:
+                    return Decimal(str(rule.surcharge_amount)).quantize(Decimal("0.01"))
+            elif rule.rule_type == RuleType.GROUP_DISCOUNT:
+                # Group discount based on passenger count
+                if rule.discount_percentage is not None and pax_count >= (rule.min_pax or 1):
+                    return (subtotal * Decimal(str(rule.discount_percentage)) / Decimal("100")).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    )
+            elif rule.rule_type == RuleType.EARLY_BIRD:
+                # Early bird discount - could be enhanced with booking date logic
+                if rule.discount_percentage is not None:
+                    return (subtotal * Decimal(str(rule.discount_percentage)) / Decimal("100")).quantize(
+                        Decimal("0.01"), rounding=ROUND_HALF_UP
+                    )
+                    
+        except (ValueError, TypeError, ArithmeticError) as e:
+            logger.warning("Error calculating rule effect for rule %s: %s", rule.name, e)
+            
+        return Decimal("0.00")
+
+    async def get_pricing_rules(self, service_type: Optional[str] = None) -> List[PricingRule]:
+        """Get all active pricing rules, optionally filtered by service type"""
+        stmt = select(PricingRule).where(PricingRule.is_active == True)
         
-        # Use attribute access to get discount value
-        if rule.discount_type == DiscountType.PERCENTAGE_DISCOUNT:
-            if rule.discount_percentage is not None:
-                return current_price * Decimal(str(rule.discount_percentage)) / Decimal('100')
+        if service_type:
+            stmt = stmt.where(
+                (PricingRule.service_type == service_type) | (PricingRule.service_type.is_(None))
+            )
+            
+        stmt = stmt.order_by(PricingRule.priority.asc(), PricingRule.name.asc())
         
-        elif rule.discount_type == DiscountType.FLAT_DISCOUNT:
-            if rule.discount_amount is not None:
-                return Decimal(str(rule.discount_amount))
-        
-        elif rule.discount_type == DiscountType.GROUP_DISCOUNT:
-            # Group discount based on passenger count
-            if rule.discount_percentage is not None and pax_count >= (rule.min_pax or 1):
-                return current_price * Decimal(str(rule.discount_percentage)) / Decimal('100')
-        
-        elif rule.discount_type == DiscountType.EARLY_BIRD:
-            # Early bird discount - could check booking date vs start date
-            if rule.discount_percentage is not None:
-                return current_price * Decimal(str(rule.discount_percentage)) / Decimal('100')
-        
-        # If we need to access conditions JSON, do it safely after materialization
-        if rule.conditions:
-            conditions_dict = rule.conditions  # This is now a Python dict, safe to subscript
-            # Example: threshold = conditions_dict.get("threshold", 0)
-        
-        return Decimal('0')
-    
-    async def validate_promo_code(self, promo_code: str, request: PricingRequest) -> Optional[PricingRule]:
-        """Validate promotional code"""
-        if not promo_code:
-            return None
-        
-        stmt = select(PricingRule).where(
-            PricingRule.code == promo_code,
-            PricingRule.is_active == True,
-            PricingRule.valid_from <= date.today(),
-            PricingRule.valid_until >= date.today()
-        )
-        
+        return self.session.exec(stmt).all()
+
+    async def create_pricing_rule(self, rule_data: dict) -> PricingRule:
+        """Create a new pricing rule"""
+        rule = PricingRule(**rule_data)
+        self.session.add(rule)
+        self.session.commit()
+        self.session.refresh(rule)
+        return rule
+
+    async def update_pricing_rule(self, rule_id: UUID, rule_data: dict) -> PricingRule:
+        """Update an existing pricing rule"""
+        stmt = select(PricingRule).where(PricingRule.id == rule_id)
         rule = self.session.exec(stmt).first()
         
         if not rule:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid or expired promo code: {promo_code}"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Pricing rule not found"
             )
         
-        # Check usage limits using attribute access
-        if rule.max_uses is not None and rule.current_uses >= rule.max_uses:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Promo code '{promo_code}' has reached its usage limit"
-            )
+        for field, value in rule_data.items():
+            if hasattr(rule, field):
+                setattr(rule, field, value)
         
-        # Check applicability using methods (which use attribute access)
-        if not rule.is_applicable_for_pax(request.pax_count):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Promo code '{promo_code}' is not valid for {request.pax_count} passengers"
-            )
-        
-        if not rule.is_applicable_for_amount(request.base_price):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Promo code '{promo_code}' is not valid for this price range"
-            )
-        
-        if not rule.is_applicable_for_dates(request.start_date, date.today()):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Promo code '{promo_code}' is not valid for the selected dates"
-            )
-        
+        self.session.add(rule)
+        self.session.commit()
+        self.session.refresh(rule)
         return rule

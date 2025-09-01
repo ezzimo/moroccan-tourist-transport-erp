@@ -1,38 +1,105 @@
-@@ .. @@
- @router.post("/", response_model=BookingResponse)
- async def create_booking(
-     booking_data: BookingCreate,
-     db: Session = Depends(get_session),
-     current_user: CurrentUser = Depends(get_current_user),
-     _: None = Depends(require_permission("booking", "create", "bookings")),
- ):
-     """Create a new booking"""
-+    
-+    logger.info(
-+        "Booking creation requested by %s for customer_id=%s",
-+        current_user.email, booking_data.customer_id
-+    )
-+    
-+    try:
-+        booking_service = BookingService(db)
-+        result = await booking_service.create_booking(booking_data, current_user.user_id)
-+        
-+        logger.info(
-+            "Booking created successfully: %s for customer %s",
-+            result.id, result.customer_id
-+        )
-+        
-+        return result
-+        
-+    except HTTPException as e:
-+        logger.error(
-+            "Booking creation failed for customer %s: %s",
-+            booking_data.customer_id, e.detail
-+        )
-+        raise
-+    except Exception as e:
-+        logger.exception("Unexpected error creating booking: %s", e)
-+        raise HTTPException(
-+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-+            detail=f"Failed to create booking: {str(e)}"
-+        )
+import logging
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
+import redis
+
+from database import get_session
+from utils.redis import get_redis
+from utils.auth import get_current_user, require_permission, CurrentUser
+from utils.pagination import PaginationParams, paginate_query
+from services.booking_service import BookingService
+from services.pricing_service import PricingService
+from schemas.booking import BookingCreate, BookingUpdate, BookingResponse
+from schemas.booking_filters import BookingFilters
+from schemas.pricing import PricingRequest
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/bookings", tags=["Bookings"])
+
+# === ROUTER: CREATE BOOKING ===
+@router.post("/", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
+async def create_booking(
+    body: BookingCreate,
+    db: Session = Depends(get_session),
+    redis_client: redis.Redis = Depends(get_redis),
+    current_user: CurrentUser = Depends(get_current_user),
+    _: None = Depends(require_permission("booking", "create", "bookings")),
+):
+    """
+    Create a new booking with comprehensive validation and pricing
+    
+    If total_price is not provided, it will be calculated server-side
+    using the pricing service and applicable rules.
+    """
+    logger.info("Creating booking for customer %s by user %s", 
+               body.customer_id, current_user.email)
+    
+    # Input validation
+    if not body.customer_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Customer ID is required"
+        )
+    
+    if not body.service_type:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Service type is required"
+        )
+    
+    # If total_price not provided, calculate server-side pricing
+    if body.total_price is None:
+        if body.base_price is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Either total_price or base_price must be provided"
+            )
+        
+        try:
+            logger.debug("Calculating server-side pricing for booking")
+            pricing_req = PricingRequest(
+                service_type=body.service_type,
+                base_price=body.base_price,
+                pax_count=body.pax_count,
+                start_date=body.start_date,
+                end_date=body.end_date,
+                customer_id=body.customer_id,
+                currency=body.currency or "MAD",
+                promo_code=body.promo_code
+            )
+            pricing_service = PricingService(db)
+            pricing_result = await pricing_service.calculate_pricing(pricing_req)
+            
+            # Update booking data with calculated pricing
+            body.total_price = pricing_result.total_price
+            body.discount_amount = pricing_result.discount_amount
+            
+            logger.info("Server-side pricing calculated: total=%s, discount=%s", 
+                       pricing_result.total_price, pricing_result.discount_amount)
+        except HTTPException:
+            # Re-raise pricing validation errors
+            raise
+        except Exception as ex:
+            logger.error("Server-side pricing calculation failed: %s", ex)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unable to calculate pricing for this booking"
+            )
+    
+    try:
+        service = BookingService(db, redis_client)
+        booking = await service.create_booking(body, created_by=current_user.user_id)
+        
+        logger.info("Booking created successfully: id=%s", booking.id)
+        return booking
+        
+    except HTTPException:
+        # Re-raise service-level HTTP exceptions
+        raise
+    except Exception as ex:
+        logger.exception("Unexpected error creating booking: %s", ex)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create booking - please try again"
+        )

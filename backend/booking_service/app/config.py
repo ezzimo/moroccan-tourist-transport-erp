@@ -8,6 +8,7 @@
      
      # Service Integration
      auth_service_url: str = "http://auth_service:8000"
+    customer_service_url: str = "http://crm_service:8001"
 +    customer_service_url: str = "http://crm_service:8001"
      
      # JWT (for token validation)
@@ -24,6 +25,7 @@
      # Environment
      environment: str = "development"
      debug: bool = True
+    allow_dev_customer_bypass: bool = False
      
 +    # Development settings
 +    allow_dev_customer_bypass: bool = False
