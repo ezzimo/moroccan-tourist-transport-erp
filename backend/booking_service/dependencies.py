@@ -1,39 +1,40 @@
 """
 Dependency injection providers for booking service
 """
-from typing import AsyncGenerator
+from typing import Generator
 from sqlmodel import Session, create_engine
-from sqlalchemy.pool import StaticPool
+from functools import lru_cache
 import redis.asyncio as redis
-from fastapi import Depends
 from config import settings
 
-# Database engine
-engine = create_engine(
-    settings.database_url,
-    echo=settings.debug,
-    pool_pre_ping=True,
-    pool_recycle=300,
-    poolclass=StaticPool if "sqlite" in settings.database_url else None,
-    connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {}
-)
+# Database engine (singleton)
+@lru_cache()
+def get_engine():
+    """Get database engine"""
+    return create_engine(
+        settings.database_url,
+        echo=settings.debug,
+        pool_pre_ping=True,
+        pool_recycle=300
+    )
 
-# Redis client (global instance)
-_redis_client = None
-
-async def get_session() -> AsyncGenerator[Session, None]:
+def get_db() -> Generator[Session, None, None]:
     """Database session dependency"""
+    engine = get_engine()
     with Session(engine) as session:
         yield session
 
+# Redis client (singleton)
+_redis_client = None
+
 async def get_redis() -> redis.Redis:
-    """Redis client dependency - matches auth_service style"""
+    """Redis client dependency - matches auth_service pattern"""
     global _redis_client
     if _redis_client is None:
-        # Build Redis URL from settings
+        # Use redis_url if available, otherwise build from components
         redis_url = getattr(settings, "redis_url", None)
         if not redis_url:
-            # Fallback construction if redis_url not set
+            # Fallback to component-based construction
             redis_host = getattr(settings, "redis_host", "localhost")
             redis_port = getattr(settings, "redis_port", 6379)
             redis_db = getattr(settings, "redis_db", 0)
@@ -42,6 +43,3 @@ async def get_redis() -> redis.Redis:
         _redis_client = redis.from_url(redis_url, decode_responses=True)
     
     return _redis_client
-
-# Aliases for backward compatibility
-get_db = get_session
