@@ -196,7 +196,7 @@ export default function ToursPage() {
         <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Navigation</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Link
-            to="/tours/templates"
+            to="/tours/templates" 
             className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors group"
           >
             <Star className="h-8 w-8 text-yellow-600" />
@@ -207,24 +207,24 @@ export default function ToursPage() {
           </Link>
           
           <Link
-            to="/tours/instances"
+            to="#"
             className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors group"
           >
             <MapPin className="h-8 w-8 text-blue-600" />
             <div className="ml-3">
-              <p className="font-medium text-gray-900">Tour Instances</p>
-              <p className="text-sm text-gray-500">Track active and planned tours</p>
+              <p className="font-medium text-gray-900">Tour Instances (Coming Soon)</p>
+              <p className="text-sm text-gray-500">Will track active and planned tours</p>
             </div>
           </Link>
           
           <Link
-            to="/tours/incidents"
+            to="#"
             className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors group"
           >
             <Clock className="h-8 w-8 text-red-600" />
             <div className="ml-3">
-              <p className="font-medium text-gray-900">Incidents</p>
-              <p className="text-sm text-gray-500">Monitor and resolve issues</p>
+              <p className="font-medium text-gray-900">Incidents (Coming Soon)</p>
+              <p className="text-sm text-gray-500">Will monitor and resolve issues</p>
             </div>
           </Link>
         </div>

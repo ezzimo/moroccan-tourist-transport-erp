@@ -71,11 +71,11 @@ export default function TourTemplatesPage() {
           <p className="text-gray-600">Create and manage reusable tour templates</p>
         </div>
         <Link
-          to="/tours/templates/create"
+          to="#"
           className="inline-flex items-center px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors"
         >
           <Plus className="h-5 w-5 mr-2" />
-          Create Template
+          Create Template (Coming Soon)
         </Link>
       </div>
 
@@ -194,7 +194,7 @@ export default function TourTemplatesPage() {
           {templates.map((template) => (
             <Link
               key={template.id}
-              to={`/tours/templates/${template.id}`}
+              to="#"
               className="bg-white rounded-lg border hover:shadow-md transition-shadow"
             >
               <div className="p-6">

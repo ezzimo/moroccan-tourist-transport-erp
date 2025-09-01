@@ -17,6 +17,11 @@ import { useAuth } from '../auth/context/AuthContext';
 import AdminUserManagement from '../auth/components/AdminUserManagement';
 import LoadingSpinner from '../components/LoadingSpinner';
 
+// Create a simple hook that doesn't fail
+function useIncidentStats(days: number) {
+  return { data: null, isLoading: false, error: null };
+}
+
 export default function DashboardPage() {
   console.log('🔧 DashboardPage: Component initializing');
   
