@@ -98,13 +98,7 @@ async def health_check():
                 "allowed_audiences": settings.jwt_allowed_audiences,
                 "issuer": settings.jwt_issuer,
                 "disable_audience_check": settings.jwt_disable_audience_check
-            }
-            "jwt_config": {
-                "audience": settings.jwt_audience,
-                "allowed_audiences": settings.jwt_allowed_audiences,
-                "issuer": settings.jwt_issuer,
-                "audience_check_disabled": settings.jwt_disable_audience_check
-            }
+            },
         }
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")
