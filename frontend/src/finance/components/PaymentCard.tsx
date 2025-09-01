@@ -1,7 +1,8 @@
 import React from 'react';
 import { CreditCard, Calendar, CheckCircle, Clock, X } from 'lucide-react';
 import { Payment } from '../types/payment';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatDate } from '../../utils/formatters';
+import { formatMoney } from '../../utils/number';
 
 interface PaymentCardProps {
   payment: Payment;
@@ -43,7 +44,7 @@ export default function PaymentCard({ payment }: PaymentCardProps) {
           {getStatusIcon(payment.status)}
           <div>
             <h4 className="font-medium text-gray-900">
-              {formatCurrency(payment.amount, payment.currency)}
+              {formatMoney(payment?.amount, 2, payment?.currency)}
             </h4>
             <div className="flex items-center gap-2 mt-1">
               <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(payment.status)}`}>
@@ -81,7 +82,7 @@ export default function PaymentCard({ payment }: PaymentCardProps) {
         {payment.processing_fee && (
           <div>
             <p className="font-medium text-gray-700">Processing Fee:</p>
-            <p className="text-gray-600">{formatCurrency(payment.processing_fee, payment.currency)}</p>
+            <p className="text-gray-600">{formatMoney(payment?.processing_fee, 2, payment?.currency)}</p>
           </div>
         )}
       </div>

@@ -4,11 +4,10 @@ import { useCreateBooking } from '../hooks/useBookings';
 import { useCustomers } from '../../crm/hooks/useCustomers';
 import { usePricingCalculation } from '../hooks/usePricing';
 import { CreateBookingData } from '../types/booking';
-import { useDebounce, safeNumber, isValidNumber, formatCurrencyInput } from '../../utils/debounce';
+import { useDebounce } from '../../utils/debounce';
+import { safeNumber, isValidNumber, formatCurrencyInput, formatMoney } from '../../utils/number';
 import { useMemo, useCallback } from 'react';
 import ErrorBoundary from '../../components/ErrorBoundary';
-import { useMemo, useCallback } from 'react';
-import { debounce } from 'lodash-es';
 
 interface CreateBookingModalProps {
   isOpen: boolean;
@@ -63,11 +62,6 @@ export default function CreateBookingModal({ isOpen, onClose }: CreateBookingMod
     debouncedEnablePricing();
   }, [debouncedEnablePricing]);
 
-  // Safe number conversion helper
-  const safeNumber = useCallback((value: string | number): number => {
-    const num = typeof value === 'string' ? parseFloat(value) : value;
-    return Number.isFinite(num) && num >= 0 ? num : 0;
-  }, []);
 
   // Only calculate pricing when all required fields are valid
   const shouldCalculatePricing = useMemo(() => {
@@ -337,17 +331,17 @@ export default function CreateBookingModal({ isOpen, onClose }: CreateBookingMod
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-blue-700">Base Price:</span>
-                  <span className="font-medium">{(pricingData.base_price || 0).toFixed(2)} {pricingData.currency || 'MAD'}</span>
+                  <span className="font-medium">{formatMoney(pricingData?.base_price, 2, pricingData?.currency || 'MAD')}</span>
                 </div>
-                {(pricingData.discount_amount || 0) > 0 && (
+                {safeNumber(pricingData?.discount_amount) > 0 && (
                   <div className="flex justify-between">
                     <span className="text-blue-700">Discount:</span>
-                    <span className="font-medium text-green-600">-{(pricingData.discount_amount || 0).toFixed(2)} {pricingData.currency || 'MAD'}</span>
+                    <span className="font-medium text-green-600">-{formatMoney(pricingData?.discount_amount, 2, pricingData?.currency || 'MAD')}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t border-blue-200 pt-1">
                   <span className="font-medium text-blue-900">Total:</span>
-                  <span className="font-bold text-blue-900">{(pricingData.total_price || 0).toFixed(2)} {pricingData.currency || 'MAD'}</span>
+                  <span className="font-bold text-blue-900">{formatMoney(pricingData?.total_price, 2, pricingData?.currency || 'MAD')}</span>
                 </div>
               </div>
             </div>
@@ -357,7 +351,7 @@ export default function CreateBookingModal({ isOpen, onClose }: CreateBookingMod
             <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
               <h4 className="font-medium text-red-900 mb-2">Pricing Error</h4>
               <p className="text-sm text-red-700">
-                {pricingError.message || 'Unable to calculate pricing. Please check your input values.'}
+                {pricingError?.message || 'Unable to calculate pricing. Please check your input values.'}
               </p>
             </div>
           )}

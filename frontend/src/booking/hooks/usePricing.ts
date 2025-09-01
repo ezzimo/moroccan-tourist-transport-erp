@@ -7,7 +7,7 @@ export function usePricingCalculation(data: PricingRequest, enabled = true) {
     queryKey: ['pricing-calculation', data],
     queryFn: () => pricingApi.calculatePricing(data),
     enabled: enabled && !!data.service_type && data.base_price > 0 && !!data.pax_count && !!data.start_date,
-    retry: false,
+    retry: false, // Prevent cascading retries on invalid input
     refetchOnWindowFocus: false,
   });
 }
@@ -24,6 +24,7 @@ export function useCreateDiscountRule() {
 
   return useMutation({
     mutationFn: (data: Partial<DiscountRule>) => pricingApi.createDiscountRule(data),
+    retry: false,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['discount-rules'] });
     },
@@ -34,5 +35,6 @@ export function useValidatePromoCode() {
   return useMutation({
     mutationFn: ({ code, bookingData }: { code: string; bookingData: Partial<PricingRequest> }) =>
       pricingApi.validatePromoCode(code, bookingData),
+    retry: false,
   });
 }

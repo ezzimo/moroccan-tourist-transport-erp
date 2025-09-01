@@ -22,6 +22,7 @@ export function useCreateInvoice() {
 
   return useMutation({
     mutationFn: (data: CreateInvoiceData) => invoiceApi.createInvoice(data),
+    retry: false,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
     },
@@ -33,6 +34,7 @@ export function useGenerateInvoice() {
 
   return useMutation({
     mutationFn: (data: GenerateInvoiceData) => invoiceApi.generateInvoice(data),
+    retry: false,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
     },
@@ -44,6 +46,7 @@ export function useSendInvoice() {
 
   return useMutation({
     mutationFn: (id: string) => invoiceApi.sendInvoice(id),
+    retry: false,
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       queryClient.invalidateQueries({ queryKey: ['invoice', id] });
@@ -57,6 +60,7 @@ export function useUpdateInvoice() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<CreateInvoiceData> }) =>
       invoiceApi.updateInvoice(id, data),
+    retry: false,
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       queryClient.invalidateQueries({ queryKey: ['invoice', variables.id] });

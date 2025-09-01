@@ -5,6 +5,7 @@ import { PaymentFilters } from '../types/payment';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import PaymentCard from '../components/PaymentCard';
 import CreatePaymentModal from '../components/CreatePaymentModal';
+import { toNumber } from '../../utils/number';
 
 export default function PaymentsPage() {
   const [filters, setFilters] = useState<PaymentFilters>({ page: 1, size: 20 });
@@ -79,7 +80,7 @@ export default function PaymentsPage() {
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-500">Total Amount</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {payments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()} MAD
+                  {payments.reduce((sum, p) => sum + toNumber(p?.amount, 0), 0).toLocaleString()} MAD
                 </p>
               </div>
             </div>

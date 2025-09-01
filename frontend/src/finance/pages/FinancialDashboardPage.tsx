@@ -3,7 +3,7 @@ import { TrendingUp, DollarSign, FileText, AlertTriangle } from 'lucide-react';
 import { useFinancialDashboard, useRevenueAnalytics } from '../hooks/useAnalytics';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import RevenueChart from '../components/RevenueChart';
-import { formatCurrency } from '../../utils/formatters';
+import { formatMoney } from '../../utils/number';
 
 export default function FinancialDashboardPage() {
   const { data: dashboard, isLoading: dashboardLoading } = useFinancialDashboard();
@@ -34,7 +34,7 @@ export default function FinancialDashboardPage() {
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-500">Revenue (MTD)</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(dashboard.total_revenue_mtd)}
+                  {formatMoney(dashboard?.total_revenue_mtd)}
                 </p>
               </div>
             </div>
@@ -45,7 +45,7 @@ export default function FinancialDashboardPage() {
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-500">Net Profit (MTD)</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(dashboard.net_profit_mtd)}
+                  {formatMoney(dashboard?.net_profit_mtd)}
                 </p>
               </div>
             </div>
@@ -56,7 +56,7 @@ export default function FinancialDashboardPage() {
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-500">Outstanding</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(dashboard.outstanding_invoices)}
+                  {formatMoney(dashboard?.outstanding_invoices)}
                 </p>
               </div>
             </div>
@@ -67,7 +67,7 @@ export default function FinancialDashboardPage() {
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-500">Overdue</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {formatCurrency(dashboard.overdue_amount)}
+                  {formatMoney(dashboard?.overdue_amount)}
                 </p>
               </div>
             </div>
@@ -91,19 +91,19 @@ export default function FinancialDashboardPage() {
             <div className="bg-blue-50 p-4 rounded-lg">
               <p className="text-sm font-medium text-blue-600">Next 30 Days</p>
               <p className="text-2xl font-bold text-blue-900">
-                {formatCurrency(dashboard.cash_flow_forecast.next_30_days)}
+                {formatMoney(dashboard?.cash_flow_forecast?.next_30_days)}
               </p>
             </div>
             <div className="bg-green-50 p-4 rounded-lg">
               <p className="text-sm font-medium text-green-600">Next 60 Days</p>
               <p className="text-2xl font-bold text-green-900">
-                {formatCurrency(dashboard.cash_flow_forecast.next_60_days)}
+                {formatMoney(dashboard?.cash_flow_forecast?.next_60_days)}
               </p>
             </div>
             <div className="bg-purple-50 p-4 rounded-lg">
               <p className="text-sm font-medium text-purple-600">Next 90 Days</p>
               <p className="text-2xl font-bold text-purple-900">
-                {formatCurrency(dashboard.cash_flow_forecast.next_90_days)}
+                {formatMoney(dashboard?.cash_flow_forecast?.next_90_days)}
               </p>
             </div>
           </div>
@@ -119,7 +119,7 @@ export default function FinancialDashboardPage() {
               <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <span className="font-medium text-gray-900">{customer.customer_name}</span>
                 <span className="text-lg font-bold text-green-600">
-                  {formatCurrency(customer.total_amount)}
+                  {formatMoney(customer?.total_amount)}
                 </span>
               </div>
             ))}
