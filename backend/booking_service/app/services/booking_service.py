@@ -26,40 +26,11 @@ logger = logging.getLogger(__name__)
 class BookingService:
     """Service for handling booking operations"""
     
-    async def _verify_customer_exists(self, customer_id: str, bearer_token: str | None = None) -> None:
-        """
-        Validate customer existence against CRM.
-        In development or when ALLOW_DEV_CUSTOMER_BYPASS=True, tolerate errors from CRM
-        but still fail fast on an explicit 404.
-        """
-        url = f"{settings.CUSTOMER_SERVICE_URL}/customers/{customer_id}"
-        headers = {}
-        if bearer_token:
-            headers["Authorization"] = f"Bearer {bearer_token}"
-
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(url, headers=headers)
-        except Exception as ex:
-            log.warning("CRM lookup failed (%s). url=%s", ex, url)
-            if settings.ENVIRONMENT.lower() == "development" or settings.ALLOW_DEV_CUSTOMER_BYPASS:
-                return
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to verify customer information")
-
-        if resp.status_code == 200:
-            return
-
-        if resp.status_code == 404:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer not found")
-
-        log.warning("CRM lookup returned %s; url=%s", resp.status_code, url)
-        if settings.ENVIRONMENT.lower() == "development" or settings.ALLOW_DEV_CUSTOMER_BYPASS:
-            return
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to verify customer information")
     def __init__(self, session: Session, redis_client=None, access_token: Optional[str] = None):
         self.session = session
         self.redis = redis_client
         self.access_token = access_token
+
     async def _verify_customer_exists(self, customer_id: str, bearer_token: str | None = None) -> None:
         """
         Validate customer existence against CRM.
@@ -77,19 +48,32 @@ class BookingService:
         except Exception as ex:
             logger.warning("CRM lookup failed (%s). url=%s", ex, url)
             if settings.ENVIRONMENT.lower() == "development" or settings.ALLOW_DEV_CUSTOMER_BYPASS:
+                logger.warning("Proceeding with booking creation despite CRM verification failure (development mode)")
                 return
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to verify customer information")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="Unable to verify customer information"
+            )
 
         if resp.status_code == 200:
+            logger.info("Customer %s verified successfully", customer_id)
             return
 
         if resp.status_code == 404:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer not found")
+            logger.error("Customer %s not found in CRM", customer_id)
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="Customer not found"
+            )
 
         logger.warning("CRM lookup returned %s; url=%s", resp.status_code, url)
         if settings.ENVIRONMENT.lower() == "development" or settings.ALLOW_DEV_CUSTOMER_BYPASS:
+            logger.warning("Proceeding with booking creation despite CRM verification failure (development mode)")
             return
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unable to verify customer information")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, 
+            detail="Unable to verify customer information"
+        )
 
         self.pricing_service = PricingService(session)
         self.customer_client = CustomerClient()

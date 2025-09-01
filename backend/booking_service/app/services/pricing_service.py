@@ -1,4 +1,6 @@
-# backend/booking_service/app/services/pricing_service.py
+"""
+Pricing service with pure Python calculations
+"""
 from __future__ import annotations
 
 import logging
@@ -12,6 +14,7 @@ from sqlmodel import Session
 logger = logging.getLogger(__name__)
 
 def _to_decimal(x: Any) -> Decimal:
+    """Convert any numeric value to Decimal safely"""
     if isinstance(x, Decimal):
         return x
     try:
@@ -20,6 +23,7 @@ def _to_decimal(x: Any) -> Decimal:
         return Decimal("0")
 
 def _money(x: Decimal) -> Decimal:
+    """Round to 2 decimal places for currency"""
     return x.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 @dataclass
@@ -32,6 +36,8 @@ class PricingInput:
     currency: str = "MAD"
 
 class PricingService:
+    """Service for handling pricing calculations with pure Python arithmetic"""
+    
     def __init__(self, session: Session):
         self.session = session
 
@@ -98,3 +104,33 @@ class PricingService:
             "total": total,
             "breakdown": breakdown,
         }
+
+    async def validate_pricing_input(
+        self,
+        service_type: str,
+        base_price: Any,
+        pax_count: int,
+        start_date: date,
+        end_date: Optional[date] = None
+    ) -> None:
+        """Validate pricing calculation inputs"""
+        if not service_type or not service_type.strip():
+            raise ValueError("Service type is required")
+        
+        if _to_decimal(base_price) <= 0:
+            raise ValueError("Base price must be greater than 0")
+        
+        if pax_count <= 0:
+            raise ValueError("Passenger count must be greater than 0")
+        
+        if end_date and end_date < start_date:
+            raise ValueError("End date cannot be before start date")
+        
+        # Validate date is not too far in the past or future
+        from datetime import datetime, timedelta
+        today = datetime.now().date()
+        if start_date < today - timedelta(days=30):
+            raise ValueError("Start date cannot be more than 30 days in the past")
+        
+        if start_date > today + timedelta(days=365):
+            raise ValueError("Start date cannot be more than 1 year in the future")
