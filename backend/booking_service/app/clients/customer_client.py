@@ -1,129 +1,81 @@
 """
-Customer service client with explicit error handling
+Customer service client for verification
 """
-import os
-import httpx
 import logging
+import httpx
 from fastapi import HTTPException, status
-from typing import Optional
+from config import settings
 
 logger = logging.getLogger(__name__)
 
-CUSTOMER_SERVICE_URL = os.getenv("CUSTOMER_SERVICE_URL", "http://crm_service:8001")
-
 
 class CustomerClient:
-    """Client for interacting with the CRM/Customer service"""
+    """Client for communicating with the customer service"""
     
-    def __init__(self, base_url: Optional[str] = None):
-        self.base_url = base_url or CUSTOMER_SERVICE_URL
-        self._bypass = os.getenv("ALLOW_DEV_CUSTOMER_BYPASS", "false").lower() == "true"
-        
-    async def verify_customer_exists(self, customer_id: str) -> bool:
+    def __init__(self, base_url: str | None = None):
+        self.base_url = base_url or settings.CUSTOMER_SERVICE_URL
+        self._timeout = 10
+
+    async def verify_customer(self, customer_id: str, access_token: str | None = None) -> dict:
         """
-        Verify that a customer exists in the CRM service
+        Verify customer exists and return customer data
         
         Args:
-            customer_id: UUID string of the customer
+            customer_id: UUID of the customer to verify
+            access_token: JWT token to forward for authentication
             
         Returns:
-            bool: True if customer exists
+            Customer data dictionary
             
         Raises:
-            HTTPException: 400 if customer not found, 502 if service unavailable
+            HTTPException: If customer not found or service unavailable
         """
-        if self._bypass:
-            logger.warning("Customer verification bypassed for development (customer_id=%s)", customer_id)
-            return True
-            
-        url = f"{self.base_url}/api/v1/customers/{customer_id}"
+        url = f"{self.base_url}/customers/{customer_id}"
+        headers = {}
         
+        if access_token:
+            headers["Authorization"] = f"Bearer {access_token}"
+
         try:
-            logger.debug("Verifying customer exists: %s", url)
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(url)
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                logger.debug("Verifying customer %s at %s", customer_id, url)
+                response = await client.get(url, headers=headers)
                 
-            if response.status_code == 200:
-                logger.debug("Customer %s verified successfully", customer_id)
-                return True
-            elif response.status_code == 404:
-                logger.warning("Customer %s not found in CRM service", customer_id)
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Customer with ID {customer_id} not found"
-                )
-            elif response.status_code >= 500:
-                logger.error("CRM service error (status=%d) when verifying customer %s", 
-                           response.status_code, customer_id)
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Unable to verify customer information - CRM service unavailable"
-                )
-            else:
-                logger.error("Unexpected response (status=%d) when verifying customer %s", 
-                           response.status_code, customer_id)
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Unable to verify customer information"
-                )
-                
+                if response.status_code == 200:
+                    customer_data = response.json()
+                    logger.info("Customer %s verified successfully", customer_id)
+                    return customer_data
+                    
+                elif response.status_code == 404:
+                    logger.warning("Customer %s not found", customer_id)
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Customer {customer_id} not found"
+                    )
+                    
+                elif response.status_code == 401:
+                    logger.warning("Unauthorized access to customer service")
+                    raise HTTPException(
+                        status_code=status.HTTP_401_UNAUTHORIZED,
+                        detail="Unauthorized access to customer information"
+                    )
+                    
+                else:
+                    logger.error("Customer service returned %s: %s", response.status_code, response.text)
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail="Unable to verify customer information"
+                    )
+                    
         except httpx.TimeoutException:
-            logger.error("Timeout when verifying customer %s", customer_id)
-            if self._bypass:
-                logger.warning("Customer verification timeout bypassed for development")
-                return True
+            logger.error("Timeout verifying customer %s", customer_id)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Customer verification timeout - please try again"
+                detail="Customer service timeout"
             )
         except httpx.RequestError as e:
-            logger.error("Network error when verifying customer %s: %s", customer_id, e)
-            if self._bypass:
-                logger.warning("Customer verification network error bypassed for development")
-                return True
+            logger.error("Network error verifying customer %s: %s", customer_id, e)
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
                 detail="Unable to connect to customer service"
             )
-        except HTTPException:
-            # Re-raise our own HTTP exceptions
-            raise
-        except Exception as e:
-            logger.exception("Unexpected error verifying customer %s: %s", customer_id, e)
-            if self._bypass:
-                logger.warning("Customer verification error bypassed for development")
-                return True
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Customer verification failed"
-            )
-
-    async def get_customer_info(self, customer_id: str) -> Optional[dict]:
-        """
-        Get customer information from CRM service
-        
-        Args:
-            customer_id: UUID string of the customer
-            
-        Returns:
-            dict: Customer information or None if not available
-        """
-        if self._bypass:
-            return {"id": customer_id, "name": "Dev Customer", "email": "dev@example.com"}
-            
-        url = f"{self.base_url}/api/v1/customers/{customer_id}"
-        
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(url)
-                
-            if response.status_code == 200:
-                return response.json()
-            else:
-                logger.warning("Could not fetch customer info for %s (status=%d)", 
-                             customer_id, response.status_code)
-                return None
-                
-        except Exception as e:
-            logger.warning("Error fetching customer info for %s: %s", customer_id, e)
-            return None

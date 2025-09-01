@@ -1,102 +1,80 @@
 """
-Pricing rule model with explicit columns to avoid JSON subscripting
+Pricing rule model with explicit typed columns
 """
 from sqlmodel import SQLModel, Field, Column, JSON
 from typing import Optional
 from datetime import date
 from uuid import UUID, uuid4
-from enum import Enum
-
-
-class RuleType(str, Enum):
-    """Pricing rule types"""
-    PERCENTAGE_DISCOUNT = "percentage_discount"
-    FLAT_DISCOUNT = "flat_discount"
-    SURCHARGE_PERCENTAGE = "surcharge_percentage"
-    SURCHARGE_FLAT = "surcharge_flat"
-    GROUP_DISCOUNT = "group_discount"
-    EARLY_BIRD = "early_bird"
+from decimal import Decimal
 
 
 class PricingRule(SQLModel, table=True):
-    """Pricing rule model with explicit columns for safe attribute access"""
+    """Pricing rule model with explicit columns to avoid JSON subscripting"""
     __tablename__ = "pricing_rules"
 
     id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
     name: str = Field(max_length=255, index=True)
     description: Optional[str] = Field(default=None, max_length=1000)
     
-    # Rule application
-    service_type: Optional[str] = Field(default=None, max_length=100, index=True)
-    rule_type: RuleType = Field(index=True)
+    # Service targeting
+    service_type: str = Field(max_length=100, index=True)  # "Tour", "Transfer", etc.
     
-    # Discount/surcharge values
+    # Rule type and values
+    rule_type: str = Field(max_length=50)  # "percentage_discount", "flat_discount", "surcharge_percentage", "surcharge_flat"
     discount_percentage: Optional[float] = Field(default=None, ge=0, le=100)
     discount_amount: Optional[float] = Field(default=None, ge=0)
     surcharge_percentage: Optional[float] = Field(default=None, ge=0)
     surcharge_amount: Optional[float] = Field(default=None, ge=0)
     
-    # Participant constraints
+    # Applicability conditions
     min_pax: Optional[int] = Field(default=None, ge=1)
     max_pax: Optional[int] = Field(default=None, ge=1)
-    
-    # Date constraints
     start_date_from: Optional[date] = Field(default=None)
     start_date_to: Optional[date] = Field(default=None)
-    valid_from: Optional[date] = Field(default=None)
-    valid_until: Optional[date] = Field(default=None)
     
-    # Rule behavior
-    priority: int = Field(default=100, index=True)
+    # Rule metadata
+    priority: int = Field(default=100, ge=0)
     is_active: bool = Field(default=True, index=True)
-    is_combinable: bool = Field(default=True)
-    max_uses: Optional[int] = Field(default=None, ge=0)
-    current_uses: int = Field(default=0, ge=0)
+    is_combinable: bool = Field(default=False)
     
-    # Additional metadata (safe to subscript after fetching)
-    conditions: Optional[dict] = Field(default=None, sa_column=Column(JSON))
+    # Additional metadata (use sparingly, prefer explicit columns)
+    meta: Optional[dict] = Field(default=None, sa_column=Column(JSON))
     
-    def is_applicable(self, service_type: str, pax_count: int, booking_date: date) -> bool:
-        """Check if rule applies to given parameters using safe attribute access"""
+    # Timestamps
+    created_at: date = Field(default_factory=date.today)
+    updated_at: Optional[date] = Field(default=None)
+
+    def is_applicable(self, pax_count: int, start_date: date) -> bool:
+        """Check if rule applies to given parameters using attribute access only"""
         if not self.is_active:
             return False
-            
-        # Service type check
-        if self.service_type and self.service_type != service_type:
-            return False
-            
-        # Participant count checks
+        
         if self.min_pax is not None and pax_count < self.min_pax:
             return False
+        
         if self.max_pax is not None and pax_count > self.max_pax:
             return False
-            
-        # Date range checks
-        if self.start_date_from and booking_date < self.start_date_from:
+        
+        if self.start_date_from is not None and start_date < self.start_date_from:
             return False
-        if self.start_date_to and booking_date > self.start_date_to:
+        
+        if self.start_date_to is not None and start_date > self.start_date_to:
             return False
-            
-        # Rule validity period
-        if self.valid_from and booking_date < self.valid_from:
-            return False
-        if self.valid_until and booking_date > self.valid_until:
-            return False
-            
-        # Usage limits
-        if self.max_uses is not None and self.current_uses >= self.max_uses:
-            return False
-            
+        
         return True
-    
-    def get_effect_value(self) -> Optional[float]:
-        """Get the primary effect value for this rule"""
-        if self.rule_type == RuleType.PERCENTAGE_DISCOUNT:
-            return self.discount_percentage
-        elif self.rule_type == RuleType.FLAT_DISCOUNT:
-            return self.discount_amount
-        elif self.rule_type == RuleType.SURCHARGE_PERCENTAGE:
-            return self.surcharge_percentage
-        elif self.rule_type == RuleType.SURCHARGE_FLAT:
-            return self.surcharge_amount
-        return None
+
+    def get_discount_value(self) -> Decimal:
+        """Get discount value as Decimal, preferring percentage over flat amount"""
+        if self.discount_percentage is not None:
+            return Decimal(str(self.discount_percentage))
+        elif self.discount_amount is not None:
+            return Decimal(str(self.discount_amount))
+        return Decimal("0.00")
+
+    def get_surcharge_value(self) -> Decimal:
+        """Get surcharge value as Decimal, preferring percentage over flat amount"""
+        if self.surcharge_percentage is not None:
+            return Decimal(str(self.surcharge_percentage))
+        elif self.surcharge_amount is not None:
+            return Decimal(str(self.surcharge_amount))
+        return Decimal("0.00")

@@ -1,5 +1,5 @@
 """
-External service clients
+Client modules for inter-service communication
 """
 from .customer_client import CustomerClient
 
