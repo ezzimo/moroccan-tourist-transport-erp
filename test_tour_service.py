@@ -8,6 +8,7 @@ and active/planned tours
 import requests
 from datetime import datetime
 
+
 # Configuration
 FRONTEND_URL = "http://localhost:3000"
 TOUR_SERVICE_URL = "http://localhost:8010"
@@ -18,19 +19,20 @@ def test_auth_and_permissions():
     """Test authentication and tour permissions"""
     print("🔐 Testing Authentication & Permissions")
     print("=" * 50)
-
     # Test login
     try:
         login_response = requests.post(
             f"{AUTH_SERVICE_URL}/api/v1/auth/login",
-            json={"email": "admin@example.com", "password": "ChangeMe!123"},
-            timeout=10,
+            json={
+                "email": "admin@example.com",
+                "password": "ChangeMe!123"
+            },
+            timeout=10
         )
-
+        
         if login_response.status_code == 200:
             token = login_response.json().get("access_token")
             print("✅ Login successful")
-
             # Test permissions
             me_response = requests.get(
                 f"{AUTH_SERVICE_URL}/api/v1/auth/me",
@@ -50,6 +52,7 @@ def test_auth_and_permissions():
                 tour_perms = [p for p in permissions if "tour" in p.lower()]
                 print(f"🎯 Tour-related permissions: {tour_perms}")
 
+
                 return token, permissions
             else:
                 print(f"❌ Failed to get user info: {me_response.status_code}")
@@ -57,7 +60,6 @@ def test_auth_and_permissions():
         else:
             print(f"❌ Login failed: {login_response.status_code}")
             return None, []
-
     except Exception as e:
         print(f"❌ Auth test failed: {e}")
         return None, []
@@ -67,7 +69,7 @@ def test_tour_service_direct(token):
     """Test tour service endpoints directly"""
     print("\n🎯 Testing Tour Service Direct Access")
     print("=" * 50)
-
+    
     headers = {"Authorization": f"Bearer {token}"} if token else {}
 
     # Test health endpoint
@@ -79,7 +81,6 @@ def test_tour_service_direct(token):
     except Exception as e:
         print(f"❌ Tour service health check failed: {e}")
         return False
-
     # Test tour templates endpoint
     try:
         templates_response = requests.get(
@@ -95,7 +96,6 @@ def test_tour_service_direct(token):
             print(f"   Error: {templates_response.text}")
     except Exception as e:
         print(f"❌ Tour templates test failed: {e}")
-
     # Test create template endpoint
     try:
         create_data = {
@@ -107,7 +107,6 @@ def test_tour_service_direct(token):
             "max_participants": 10,
             "base_price": 500.0,
         }
-
         create_response = requests.post(
             f"{TOUR_SERVICE_URL}/api/v1/tour-templates",
             headers=headers,
@@ -121,15 +120,13 @@ def test_tour_service_direct(token):
             print(f"   ❌ Error: {create_response.text}")
     except Exception as e:
         print(f"❌ Create template test failed: {e}")
-
+    
     return True
-
 
 def test_frontend_proxy():
     """Test frontend proxy routing"""
     print("\n🌐 Testing Frontend Proxy Routing")
     print("=" * 50)
-
     try:
         # Test if frontend is accessible
         frontend_response = requests.get(f"{FRONTEND_URL}", timeout=5)
@@ -146,8 +143,6 @@ def test_frontend_proxy():
 
     except Exception as e:
         print(f"❌ Frontend proxy test failed: {e}")
-
-
 def main():
     """Run all diagnostic tests"""
     print("🚀 Tour Service Diagnostic Suite")
@@ -157,7 +152,6 @@ def main():
 
     # Test authentication
     token, permissions = test_auth_and_permissions()
-
     # Test tour service
     if token:
         test_tour_service_direct(token)
@@ -166,7 +160,6 @@ def main():
 
     # Test frontend proxy
     test_frontend_proxy()
-
     print("\n📊 Diagnostic Complete")
     print("=" * 60)
     print("Next steps:")
@@ -177,4 +170,3 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
