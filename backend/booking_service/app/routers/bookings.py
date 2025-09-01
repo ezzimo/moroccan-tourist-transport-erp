@@ -18,6 +18,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/bookings", tags=["Bookings"])
 
 # === ROUTER: CREATE BOOKING ===
+import logging
+from fastapi import HTTPException, status
+from services.booking_service import BookingService
+from services.pricing_service import PricingService
+from schemas.pricing import PricingRequest
+
+logger = logging.getLogger(__name__)
+
 @router.post("/", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
 async def create_booking(
     body: BookingCreate,
@@ -26,6 +34,26 @@ async def create_booking(
     current_user: CurrentUser = Depends(get_current_user),
     _: None = Depends(require_permission("booking", "create", "bookings")),
 ):
+    """Create a new booking with comprehensive validation and pricing"""
+    logger.info("Creating booking for customer %s by user %s", 
+                payload.customer_id, current_user.email)
+
+    try:
+        # Create service with access token for customer verification
+        service = BookingService(db, redis_client, access_token=getattr(current_user, 'access_token', None))
+        result = await service.create_booking(payload, created_by=current_user.user_id)
+        
+        logger.info("Booking created successfully: %s", result.get("id", "unknown"))
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Unexpected error creating booking: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to create booking"
+        )
     """
     Create a new booking with comprehensive validation and pricing
     
