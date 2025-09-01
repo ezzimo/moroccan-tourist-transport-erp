@@ -21,6 +21,11 @@ import BookingsPage from './booking/pages/BookingsPage';
 import BookingDetailPage from './booking/pages/BookingDetailPage';
 import ToursPage from './tour/pages/ToursPage';
 import TourTemplatesPage from './tour/pages/TourTemplatesPage';
+import TourInstancesPage from './tour/pages/TourInstancesPage';
+import TourIncidentsPage from './tour/pages/TourIncidentsPage';
+import CreateTourTemplatePage from './tour/pages/CreateTourTemplatePage';
+import TourTemplateDetailPage from './tour/pages/TourTemplateDetailPage';
+import TourDetailPage from './tour/pages/TourDetailPage';
 import QAPage from './qa/pages/QAPage';
 import AuditsPage from './qa/pages/AuditsPage';
 import EmployeesPage from './hr/pages/EmployeesPage';
@@ -35,6 +40,7 @@ import SendNotificationPage from './notification/pages/SendNotificationPage';
 import TemplatesPage from './notification/pages/TemplatesPage';
 import CreateTemplatePage from './notification/pages/CreateTemplatePage';
 import Layout from './components/Layout';
+import NotFoundPage from './pages/NotFoundPage';
 
 function App() {
   return (
@@ -64,6 +70,11 @@ function App() {
           <Route path="bookings/:id" element={<BookingDetailPage />} />
           <Route path="tours" element={<ToursPage />} />
           <Route path="tours/templates" element={<TourTemplatesPage />} />
+          <Route path="tours/templates/create" element={<CreateTourTemplatePage />} />
+          <Route path="tours/templates/:id" element={<TourTemplateDetailPage />} />
+          <Route path="tours/instances" element={<TourInstancesPage />} />
+          <Route path="tours/incidents" element={<TourIncidentsPage />} />
+          <Route path="tours/:id" element={<TourDetailPage />} />
           <Route path="qa" element={<QAPage />} />
           <Route path="qa/audits" element={<AuditsPage />} />
           <Route path="hr/employees" element={<EmployeesPage />} />
@@ -80,7 +91,7 @@ function App() {
         </Route>
 
         {/* Fallback */}
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </AuthProvider>
   );
