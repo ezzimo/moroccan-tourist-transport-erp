@@ -163,7 +163,7 @@ export default function ToursPage() {
                 {activeTours?.slice(0, 4).map((tour) => (
                   <Link
                     key={tour.id}
-                    to={`/tours/${tour.id}`}
+                    to={`/tours/instances/${tour.id}`}
                     className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     <div className="flex-1">
@@ -207,13 +207,13 @@ export default function ToursPage() {
           </Link>
           
           <Link
-            to="#"
+            to="/tours/instances"
             className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors group"
           >
             <MapPin className="h-8 w-8 text-blue-600" />
             <div className="ml-3">
-              <p className="font-medium text-gray-900">Tour Instances (Coming Soon)</p>
-              <p className="text-sm text-gray-500">Will track active and planned tours</p>
+              <p className="font-medium text-gray-900">Tour Instances</p>
+              <p className="text-sm text-gray-500">Track active and planned tours</p>
             </div>
           </Link>
           

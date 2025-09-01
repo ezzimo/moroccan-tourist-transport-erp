@@ -21,6 +21,8 @@ import BookingsPage from './booking/pages/BookingsPage';
 import BookingDetailPage from './booking/pages/BookingDetailPage';
 import ToursPage from './tour/pages/ToursPage';
 import TourTemplatesPage from './tour/pages/TourTemplatesPage';
+import CreateTourTemplatePage from './tour/pages/CreateTourTemplatePage';
+import TourInstancesPage from './tour/pages/TourInstancesPage';
 import QAPage from './qa/pages/QAPage';
 import AuditsPage from './qa/pages/AuditsPage';
 import EmployeesPage from './hr/pages/EmployeesPage';
@@ -65,6 +67,8 @@ function App() {
           <Route path="bookings/:id" element={<BookingDetailPage />} />
           <Route path="tours" element={<ToursPage />} />
           <Route path="tours/templates" element={<TourTemplatesPage />} />
+          <Route path="tours/templates/create" element={<CreateTourTemplatePage />} />
+          <Route path="tours/instances" element={<TourInstancesPage />} />
           <Route path="qa" element={<QAPage />} />
           <Route path="qa/audits" element={<AuditsPage />} />
           <Route path="hr/employees" element={<EmployeesPage />} />
