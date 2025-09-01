@@ -1,10 +1,9 @@
 """
-Authentication utilities for booking service
+Authentication utilities for booking service with enhanced error handling
 """
-from fastapi import Depends, HTTPException, status, Security, Request
+from fastapi import Depends, HTTPException, status, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-from jose.exceptions import JWTClaimsError
 from config import settings
 from typing import Optional, Dict, Any, List
 import httpx
@@ -32,90 +31,65 @@ class CurrentUser:
             f"{service_name}:*:*",
             "*:*:*"
         ]
-        return any(p in self.permissions for p in permission_variants)
-
-
-def verify_jwt_token(token: str) -> Optional[Dict[str, Any]]:
-    """Verify JWT token with audience validation"""
-    try:
-        # Get allowed audiences
-        allowed_audiences = settings.jwt_allowed_audiences
-        
-        if settings.jwt_disable_audience_check:
-            # Decode without audience verification
-            payload = jwt.decode(
-                token,
-                settings.jwt_secret_key,
-                algorithms=[settings.jwt_algorithm],
-                options={"verify_aud": False},
-                issuer=settings.jwt_issuer
-            )
-            logger.debug(f"JWT decoded without audience check for user: {payload.get('email', 'unknown')}")
-            return payload
-        
-        # Try each allowed audience
-        last_error = None
-        for audience in allowed_audiences:
-            try:
-                payload = jwt.decode(
-                    token,
-                    settings.jwt_secret_key,
-                    algorithms=[settings.jwt_algorithm],
-                    audience=audience,
-                    issuer=settings.jwt_issuer
-                )
-                logger.debug(f"JWT verified with audience '{audience}' for user: {payload.get('email', 'unknown')}")
-                return payload
-            except JWTClaimsError as e:
-                last_error = e
-                continue
-            except JWTError as e:
-                last_error = e
-                break
-        
-        if last_error:
-            logger.warning(f"JWT verification failed: {last_error}")
-        return None
-        
-    except Exception as e:
-        logger.error(f"JWT verification error: {e}")
-        return None
+        return any(perm in self.permissions for perm in permission_variants)
 
 
 async def verify_auth_token(token: str) -> Optional[Dict[str, Any]]:
-    """Verify token with local JWT verification and remote fallback"""
-    # First try local JWT verification
-    payload = verify_jwt_token(token)
-    if payload:
-        logger.debug(f"Local JWT verification successful: {payload.get('email', 'unknown')}")
-        return payload
-    
-    # Fallback to remote auth service verification
+    """Verify token with enhanced error handling and fallback"""
     try:
-        logger.debug(f"Local JWT failed, trying remote auth service: {settings.auth_service_url}")
-        async with httpx.AsyncClient() as client:
+        # First try local JWT verification for performance
+        try:
+            payload = jwt.decode(
+                token, 
+                settings.jwt_secret_key, 
+                algorithms=[settings.jwt_algorithm],
+                options={
+                    "verify_aud": not settings.jwt_disable_audience_check,
+                    "verify_iss": True
+                },
+                audience=settings.jwt_allowed_audiences if not settings.jwt_disable_audience_check else None,
+                issuer=settings.jwt_issuer
+            )
+            logger.debug(f"Local JWT verification successful for user: {payload.get('email', 'unknown')}")
+            return payload
+        except JWTError as jwt_error:
+            logger.debug(f"Local JWT verification failed: {jwt_error}")
+            # Continue to auth service verification
+        
+        # Fallback to auth service verification
+        logger.debug(f"Calling auth service at: {settings.auth_service_url}/api/v1/auth/me")
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(
                 f"{settings.auth_service_url}/api/v1/auth/me",
-                headers={"Authorization": f"Bearer {token}"},
-                timeout=5.0
+                headers={"Authorization": f"Bearer {token}"}
             )
+            
+            logger.debug(f"Auth service response status: {response.status_code}")
+            
             if response.status_code == 200:
                 user_data = response.json()
-                logger.debug(f"Remote auth verification successful: {user_data.get('email', 'unknown')}")
+                logger.debug(f"Auth service returned user: {user_data.get('email', 'unknown')}")
                 return user_data
             else:
-                logger.warning(f"Remote auth service returned {response.status_code}: {response.text}")
+                logger.warning(f"Auth service error: {response.status_code} - {response.text}")
+                return None
+                
+    except httpx.TimeoutException:
+        logger.error("Auth service timeout")
+        return None
+    except httpx.RequestError as e:
+        logger.error(f"Auth service connection error: {e}")
+        return None
     except Exception as e:
-        logger.error(f"Remote auth service error: {e}")
-    
-    return None
+        logger.error(f"Unexpected error in token verification: {e}")
+        return None
 
 
 async def get_current_user(
-    request: Request,
     credentials: HTTPAuthorizationCredentials = Security(security)
 ) -> CurrentUser:
-    """Get current authenticated user and populate request state"""
+    """Get current authenticated user with comprehensive error handling"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -123,19 +97,21 @@ async def get_current_user(
     )
     
     if not credentials or not credentials.credentials:
+        logger.warning("No credentials provided")
         raise credentials_exception
     
     token = credentials.credentials
     user_data = await verify_auth_token(token)
     
     if not user_data:
+        logger.warning("Token verification failed")
         raise credentials_exception
     
     try:
         # Handle both JWT payload and auth service response formats
         if "permissions" in user_data:
             # Response from auth service /me endpoint
-            current_user = CurrentUser(
+            return CurrentUser(
                 user_id=uuid.UUID(user_data["id"]),
                 email=user_data["email"],
                 full_name=user_data.get("full_name", ""),
@@ -143,53 +119,48 @@ async def get_current_user(
             )
         else:
             # JWT payload - need to get permissions from auth service
-            async with httpx.AsyncClient() as client:
+            logger.debug("Getting permissions from auth service")
+            async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(
                     f"{settings.auth_service_url}/api/v1/auth/permissions",
-                    headers={"Authorization": f"Bearer {token}"},
-                    timeout=5.0
+                    headers={"Authorization": f"Bearer {token}"}
                 )
                 if response.status_code == 200:
                     permissions_data = response.json()
-                    current_user = CurrentUser(
+                    return CurrentUser(
                         user_id=uuid.UUID(user_data["sub"]),
                         email=user_data["email"],
                         full_name=user_data.get("full_name", ""),
                         permissions=permissions_data["permissions"]
                     )
                 else:
+                    logger.error(f"Failed to get permissions: {response.status_code}")
                     raise credentials_exception
-        
-        # Populate request state for downstream use
-        request.state.user = current_user
-        return current_user
-        
-    except (KeyError, ValueError, TypeError) as e:
-        logger.error(f"Error processing user data: {e}, data: {user_data}")
+                    
+    except KeyError as e:
+        logger.error(f"Missing field in user data: {e}")
+        logger.error(f"User data received: {user_data}")
+        raise credentials_exception
+    except ValueError as e:
+        logger.error(f"Invalid UUID format: {e}")
+        raise credentials_exception
+    except Exception as e:
+        logger.error(f"Unexpected error in authentication: {e}")
         raise credentials_exception
 
 
 def require_permission(service_name: str, action: str, resource: str = "*"):
     """Dependency to check if user has required permission"""
-    def permission_checker(
-        request: Request,
-        current_user: CurrentUser = Depends(get_current_user)
-    ) -> CurrentUser:
-        required_permission = f"{service_name}:{action}:{resource}"
-        
+    def permission_checker(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
         if not current_user.has_permission(service_name, action, resource):
-            # Enhanced logging before 403
             logger.warning(
-                f"Permission denied - Required: {required_permission}, "
-                f"User: {current_user.email} ({current_user.user_id}), "
-                f"User permissions (first 10): {current_user.permissions[:10]}"
+                f"Permission denied for user {current_user.email}: "
+                f"required {service_name}:{action}:{resource}"
             )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permission denied: {required_permission}"
+                detail=f"Permission denied: {service_name}:{action}:{resource}"
             )
-        
-        logger.debug(f"Permission granted: {required_permission} for user {current_user.email}")
         return current_user
     
     return permission_checker
