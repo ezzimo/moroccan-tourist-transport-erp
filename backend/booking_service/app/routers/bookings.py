@@ -37,7 +37,7 @@ async def create_booking(
 ):
     """Create a new booking with comprehensive validation and pricing"""
     logger.info("Creating booking for customer %s by user %s", 
-                payload.customer_id, current_user.email)
+                body.customer_id, current_user.email)
 
     try:
         # Create service with access token for customer verification
@@ -52,9 +52,9 @@ async def create_booking(
         except Exception:
             bearer = None
 
-        await service._verify_customer_exists(str(payload.customer_id), bearer)
+        await service._verify_customer_exists(str(body.customer_id), bearer)
 
-        result = await service.create_booking(payload, created_by=current_user.user_id)
+        result = await service.create_booking(body, created_by=current_user.user_id)
         
         logger.info("Booking created successfully: %s", result.get("id", "unknown"))
         return result
