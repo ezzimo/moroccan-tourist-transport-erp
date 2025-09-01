@@ -38,37 +38,3 @@ export function useDebounce<T extends (...args: any[]) => any>(
     [callback, delay]
   );
 }
-
-/**
- * Safe number conversion utilities
- */
-export function safeNumber(value: string | number | null | undefined, defaultValue: number = 0): number {
-  if (value === null || value === undefined || value === '') {
-    return defaultValue;
-  }
-  
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  return Number.isFinite(num) ? num : defaultValue;
-}
-
-export function isValidNumber(value: string | number | null | undefined): boolean {
-  if (value === null || value === undefined || value === '') {
-    return false;
-  }
-  
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  return Number.isFinite(num) && num >= 0;
-}
-
-export function formatCurrencyInput(value: string): string {
-  // Remove any non-numeric characters except decimal point
-  const cleaned = value.replace(/[^\d.]/g, '');
-  
-  // Ensure only one decimal point
-  const parts = cleaned.split('.');
-  if (parts.length > 2) {
-    return parts[0] + '.' + parts.slice(1).join('');
-  }
-  
-  return cleaned;
-}
