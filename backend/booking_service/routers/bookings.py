@@ -31,8 +31,8 @@ router = APIRouter(prefix="/bookings", tags=["Booking Management"])
 @router.post("/", response_model=BookingResponse)
 async def create_booking(
     booking_data: BookingCreate,
-    current_user: CurrentUser = Depends(require_permission("booking", "create", "bookings"))
-    redis_client: redis.Redis = Depends(get_redis),
+    db: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(get_current_user)
         required_permission = f"{service}:{action}:{resource}"
         
     current_user: CurrentUser = Depends(
@@ -45,7 +45,7 @@ async def create_booking(
     ),
                 detail=f"Permission denied: {required_permission}"
     """Create a new booking"""
-    logger.info(f"Booking creation requested by {current_user.email}")
+    booking_service = BookingService(db)
     
     logger.info(f"Booking creation requested by user: {current_user.email}")
     
