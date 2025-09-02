@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     
     # Service Integration
     auth_service_url: str = "http://auth_service:8000"
+    crm_service_url: str = "http://crm_service:8001"
     customer_service_base: str = "http://crm_service:8001/api/v1"
     
     # Customer Verification
