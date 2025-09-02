@@ -78,9 +78,7 @@ class BookingService:
 
         try:
             # Verify customer exists (call CRM service)
-            logger.debug("DIAGNOSTIC: About to verify customer exists")
-            await self._verify_customer_exists(booking_data.customer_id)
-            logger.debug("DIAGNOSTIC: Customer verification completed successfully")
+            logger.debug("DIAGNOSTIC: Skipping internal customer verification (already done by router)")
 
             # Calculate pricing
             logger.debug("DIAGNOSTIC: Starting pricing calculation")
