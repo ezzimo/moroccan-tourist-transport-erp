@@ -46,38 +46,27 @@ class PricingService:
         try:
             # Handle both dict and PricingRequest objects for backward compatibility
             if isinstance(request, dict):
-                logger.debug("DIAGNOSTIC: Converting dict to PricingRequest")
                 from schemas.pricing import PricingRequest
                 request = PricingRequest(**request)
             
             logger.info(f"Calculating pricing for service_type={request.service_type}, base_price={request.base_price}, pax_count={request.pax_count}")
-            logger.debug("DIAGNOSTIC: Pricing request type: %s", type(request))
-            logger.debug("DIAGNOSTIC: Pricing request data: %s", request.model_dump() if hasattr(request, 'model_dump') else request)
             
             # Convert request to internal context
-            logger.debug("DIAGNOSTIC: Converting request to pricing context")
             context = PricingContext.from_request(request)
-            logger.debug("DIAGNOSTIC: Pricing context created: %s", context.model_dump())
             
             # Validate business rules
-            logger.debug("DIAGNOSTIC: Validating pricing context")
             self._validate_pricing_context(context)
-            logger.debug("DIAGNOSTIC: Pricing context validation passed")
             
             # Get applicable pricing rules
-            logger.debug("DIAGNOSTIC: Getting applicable pricing rules")
             applicable_rules = await self._get_applicable_rules(context)
-            logger.debug("DIAGNOSTIC: Found %d applicable rules", len(applicable_rules))
             
             # Calculate discounts
             total_discount = Decimal('0')
             applied_rules = []
             
-            logger.debug("DIAGNOSTIC: Processing %d pricing rules", len(applicable_rules))
             for rule in applicable_rules:
                 try:
                     discount = self._calculate_rule_discount(rule, context)
-                    logger.debug("DIAGNOSTIC: Rule %s discount: %s", rule.name, discount)
                     if discount > 0:
                         total_discount += discount
                         applied_rules.append(PricingRule(
@@ -88,24 +77,18 @@ class PricingService:
                         ))
                 except Exception as e:
                     logger.warning(f"Failed to apply pricing rule {rule.id}: {e}")
-                    logger.debug("DIAGNOSTIC: Rule application error details: %s", str(e))
                     continue
             
-            logger.debug("DIAGNOSTIC: Total discount calculated: %s", total_discount)
             
             # Calculate final price
             final_price = max(context.base_price - total_discount, Decimal('0'))
-            logger.debug("DIAGNOSTIC: Final price before quantization: %s", final_price)
             
             # Quantize to currency precision
             base_price = context.base_price.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             discount_amount = total_discount.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             total_price = final_price.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             
-            logger.debug("DIAGNOSTIC: Quantized values - base: %s, discount: %s, total: %s", 
-                        base_price, discount_amount, total_price)
             
-            logger.debug("DIAGNOSTIC: Creating PricingCalculation response")
             result = PricingCalculation(
                 base_price=base_price,
                 discount_amount=discount_amount,
@@ -113,17 +96,14 @@ class PricingService:
                 applied_rules=applied_rules,
                 currency="MAD"
             )
-            logger.debug("DIAGNOSTIC: PricingCalculation created successfully")
             
             logger.info(f"Pricing calculation successful: base={base_price}, discount={discount_amount}, total={total_price}")
             return result
             
         except PricingValidationError:
-            logger.debug("DIAGNOSTIC: PricingValidationError caught, re-raising")
             raise
         except Exception as e:
             logger.exception(f"Unexpected error in pricing calculation: {e}")
-            logger.debug("DIAGNOSTIC: Unexpected pricing error type: %s", type(e).__name__)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Internal error during pricing calculation"

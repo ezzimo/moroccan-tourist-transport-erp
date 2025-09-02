@@ -52,14 +52,11 @@ class BookingService:
     ) -> BookingResponse:
         """Create a new booking with locking mechanism"""
         logger.info("Creating booking with verification status: %s", customer_verified)
-        logger.debug("DIAGNOSTIC: Starting create_booking - customer_id=%s, service_type=%s, base_price=%s", 
-                    booking_data.customer_id, booking_data.service_type, booking_data.base_price)
         
         # Acquire lock for booking creation
         lock_key = (
             f"booking_create:{booking_data.customer_id}:{booking_data.start_date}"
         )
-        logger.debug("DIAGNOSTIC: Acquiring lock with key: %s", lock_key)
         lock_id = acquire_booking_lock(
             self.redis,
             "booking",
@@ -68,20 +65,14 @@ class BookingService:
         )
 
         if not lock_id:
-            logger.debug("DIAGNOSTIC: Failed to acquire lock")
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Another booking is being processed. Please try again.",
             )
         
-        logger.debug("DIAGNOSTIC: Lock acquired successfully: %s", lock_id)
 
         try:
-            # Verify customer exists (call CRM service)
-            logger.debug("DIAGNOSTIC: Skipping internal customer verification (already done by router)")
-
             # Calculate pricing
-            logger.debug("DIAGNOSTIC: Starting pricing calculation")
             from schemas.pricing import PricingRequest
             pricing_request = PricingRequest(
                 service_type=booking_data.service_type.value,
@@ -92,15 +83,12 @@ class BookingService:
                 customer_id=booking_data.customer_id,
                 promo_code=booking_data.promo_code,
             )
-            logger.debug("DIAGNOSTIC: Pricing request data: %s", pricing_request)
 
             pricing_result = await self.pricing_service.calculate_pricing(
                 pricing_request
             )
-            logger.debug("DIAGNOSTIC: Pricing calculation completed: %s", pricing_result)
 
             # Prepare booking data
-            logger.debug("DIAGNOSTIC: Preparing booking data")
             booking_dict = booking_data.model_dump()
             
             # Add verification metadata to internal notes
@@ -120,62 +108,38 @@ class BookingService:
                 notes = f"{' '.join(verification_info)} {notes}".strip()
                 booking_dict["internal_notes"] = notes
             
-            logger.debug("DIAGNOSTIC: Booking dict prepared with notes: %s", notes[:100])
 
             # Create booking
-            logger.debug("DIAGNOSTIC: Creating Booking model instance")
-            try:
-                booking = Booking(
-                    customer_id=booking_data.customer_id,
-                    service_type=booking_data.service_type,
-                    pax_count=booking_data.pax_count,
-                    lead_passenger_name=booking_data.lead_passenger_name,
-                    lead_passenger_email=booking_data.lead_passenger_email,
-                    lead_passenger_phone=booking_data.lead_passenger_phone,
-                    start_date=booking_data.start_date,
-                    end_date=booking_data.end_date,
-                    base_price=pricing_result.base_price,
-                    discount_amount=pricing_result.discount_amount,
-                    total_price=pricing_result.total_price,
-                    payment_method=booking_data.payment_method,
-                    special_requests=booking_data.special_requests,
-                    internal_notes=booking_dict.get("internal_notes"),
-                    expires_at=datetime.utcnow() + timedelta(minutes=30),  # 30 min expiry
-                )
-                logger.debug("DIAGNOSTIC: Booking model instance created successfully")
-            except Exception as e:
-                logger.error("DIAGNOSTIC: Failed to create Booking model instance: %s", str(e))
-                logger.error("DIAGNOSTIC: Exception type: %s", type(e).__name__)
-                raise
+            booking = Booking(
+                customer_id=booking_data.customer_id,
+                service_type=booking_data.service_type,
+                pax_count=booking_data.pax_count,
+                lead_passenger_name=booking_data.lead_passenger_name,
+                lead_passenger_email=booking_data.lead_passenger_email,
+                lead_passenger_phone=booking_data.lead_passenger_phone,
+                start_date=booking_data.start_date,
+                end_date=booking_data.end_date,
+                base_price=pricing_result.base_price,
+                discount_amount=pricing_result.discount_amount,
+                total_price=pricing_result.total_price,
+                payment_method=booking_data.payment_method,
+                special_requests=booking_data.special_requests,
+                internal_notes=booking_dict.get("internal_notes"),
+                expires_at=datetime.utcnow() + timedelta(minutes=30),  # 30 min expiry
+            )
 
-            logger.debug("DIAGNOSTIC: Adding booking to session")
             self.session.add(booking)
-            logger.debug("DIAGNOSTIC: About to commit booking to database")
             self.session.commit()
-            logger.debug("DIAGNOSTIC: Booking committed successfully")
             self.session.refresh(booking)
-            logger.debug("DIAGNOSTIC: Booking refreshed, ID: %s", booking.id)
 
             # Schedule expiry check
-            logger.debug("DIAGNOSTIC: Scheduling booking expiry")
             await self._schedule_booking_expiry(booking.id)
-            logger.debug("DIAGNOSTIC: Booking expiry scheduled")
 
             logger.info("Booking created: %s (verified: %s)", booking.id, customer_verified)
-            logger.debug("DIAGNOSTIC: About to create BookingResponse")
-            try:
-                response = BookingResponse(**booking.model_dump())
-                logger.debug("DIAGNOSTIC: BookingResponse created successfully")
-                return response
-            except Exception as e:
-                logger.error("DIAGNOSTIC: Failed to create BookingResponse: %s", str(e))
-                logger.error("DIAGNOSTIC: Exception type: %s", type(e).__name__)
-                logger.error("DIAGNOSTIC: Booking model dump: %s", booking.model_dump())
-                raise
+            return BookingResponse(**booking.model_dump())
 
         finally:
             # Always release the lock
-            logger.debug("DIAGNOSTIC: Releasing lock: %s", lock_id)
             release_booking_lock(
                 self.redis,
                 "booking",
