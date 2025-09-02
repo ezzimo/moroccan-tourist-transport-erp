@@ -1,5 +1,4 @@
 frontend/
-backend/driver_service/
 backend/fleet_service/
 backend/hr_service/
 backend/financial_service/
