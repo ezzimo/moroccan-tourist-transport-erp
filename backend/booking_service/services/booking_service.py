@@ -126,23 +126,23 @@ class BookingService:
             # Create booking
             logger.debug("DIAGNOSTIC: Creating Booking model instance")
             try:
-            booking = Booking(
-                customer_id=booking_data.customer_id,
-                service_type=booking_data.service_type,
-                pax_count=booking_data.pax_count,
-                lead_passenger_name=booking_data.lead_passenger_name,
-                lead_passenger_email=booking_data.lead_passenger_email,
-                lead_passenger_phone=booking_data.lead_passenger_phone,
-                start_date=booking_data.start_date,
-                end_date=booking_data.end_date,
-                base_price=pricing_result["base_price"],
-                discount_amount=pricing_result["discount_amount"],
-                total_price=pricing_result["total_price"],
-                payment_method=booking_data.payment_method,
-                special_requests=booking_data.special_requests,
-                internal_notes=booking_dict.get("internal_notes"),
-                expires_at=datetime.utcnow() + timedelta(minutes=30),  # 30 min expiry
-            )
+                booking = Booking(
+                    customer_id=booking_data.customer_id,
+                    service_type=booking_data.service_type,
+                    pax_count=booking_data.pax_count,
+                    lead_passenger_name=booking_data.lead_passenger_name,
+                    lead_passenger_email=booking_data.lead_passenger_email,
+                    lead_passenger_phone=booking_data.lead_passenger_phone,
+                    start_date=booking_data.start_date,
+                    end_date=booking_data.end_date,
+                    base_price=pricing_result["base_price"],
+                    discount_amount=pricing_result["discount_amount"],
+                    total_price=pricing_result["total_price"],
+                    payment_method=booking_data.payment_method,
+                    special_requests=booking_data.special_requests,
+                    internal_notes=booking_dict.get("internal_notes"),
+                    expires_at=datetime.utcnow() + timedelta(minutes=30),  # 30 min expiry
+                )
                 logger.debug("DIAGNOSTIC: Booking model instance created successfully")
             except Exception as e:
                 logger.error("DIAGNOSTIC: Failed to create Booking model instance: %s", str(e))
