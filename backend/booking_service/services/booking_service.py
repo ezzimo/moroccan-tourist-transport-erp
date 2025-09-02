@@ -82,15 +82,16 @@ class BookingService:
 
             # Calculate pricing
             logger.debug("DIAGNOSTIC: Starting pricing calculation")
-            pricing_request = {
-                "service_type": booking_data.service_type.value,
-                "base_price": booking_data.base_price,
-                "pax_count": booking_data.pax_count,
-                "start_date": booking_data.start_date,
-                "end_date": booking_data.end_date,
-                "customer_id": booking_data.customer_id,
-                "promo_code": booking_data.promo_code,
-            }
+            from schemas.pricing import PricingRequest
+            pricing_request = PricingRequest(
+                service_type=booking_data.service_type.value,
+                base_price=booking_data.base_price,
+                pax_count=booking_data.pax_count,
+                start_date=booking_data.start_date,
+                end_date=booking_data.end_date,
+                customer_id=booking_data.customer_id,
+                promo_code=booking_data.promo_code,
+            )
             logger.debug("DIAGNOSTIC: Pricing request data: %s", pricing_request)
 
             pricing_result = await self.pricing_service.calculate_pricing(

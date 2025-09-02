@@ -44,6 +44,12 @@ class PricingService:
             HTTPException: For system errors
         """
         try:
+            # Handle both dict and PricingRequest objects for backward compatibility
+            if isinstance(request, dict):
+                logger.debug("DIAGNOSTIC: Converting dict to PricingRequest")
+                from schemas.pricing import PricingRequest
+                request = PricingRequest(**request)
+            
             logger.info(f"Calculating pricing for service_type={request.service_type}, base_price={request.base_price}, pax_count={request.pax_count}")
             logger.debug("DIAGNOSTIC: Pricing request type: %s", type(request))
             logger.debug("DIAGNOSTIC: Pricing request data: %s", request.model_dump() if hasattr(request, 'model_dump') else request)
