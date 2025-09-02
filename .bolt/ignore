@@ -1,13 +1,35 @@
-backend/booking_service/
-backend/crm_service/
-backend/driver_service/
-backend/fleet_service/
-backend/hr_service/
-backend/financial_service/
-backend/inventory_service/
-backend/qa_service/
-backend/notification_service/
-frontend/src/driver/
-frontend/src/hr/
-frontend/src/inventory/
-frontend/src/notification/
+frontend/
+app_API_DOCUMENTATION.md
+AUTH_TESTING_REPORT.md
+Authentication Service Testing Report.md
+Booking_Service_API_DOCUMENTATION.md
+check_tour_routes.js
+create_test_user.py
+CRM_Service_API_Documentation.md
+Driver_Service_API_Documentation.md
+ection for users with management permissions
+Financial_Service_API_Documentation.md
+Fleet_Service_API_Documentation.md
+get-docker.sh
+hr_Service_API_Documentation.md
+Inventory_Service_API_Documentation.md
+Makefile
+Notification_Service_API_Documentation.md
+qa_service_API_DOCUMENTATION.md
+readme_content_requirements.md
+readme_generation_prompt.md
+README_TESTING.md
+README_TOUR_OPERATIONS.md
+requirements-bootstrap.txt
+Role Users.md
+sion-based access control (canRead, canCreate, canUpdate, canDelete)
+SUMMARY OF COMPLETED MICROSERVICES (Moroccan Tourist Transport ERP).md
+test_auth_flow.py
+test_booking_creation.py
+test_fixes.py
+test_frontend_routing.js
+test_service_connectivity.js
+test_tour_routes.spec.ts
+test_tour_service.py
+TESTING_AND_DEBUG_REPORT.md
+tour_service_API_DOCUMENTATION.md
