@@ -7,6 +7,7 @@ import redis.asyncio as redis
 import os
 
 from fastapi import APIRouter, Depends, Body, Query
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session
 from database import get_session, get_redis
 from services.booking_service import BookingService
@@ -19,11 +20,14 @@ from schemas.booking_filters import BookingFilters
 from schemas.booking import BookingCreate, BookingUpdate, BookingResponse
 from utils.auth import get_current_user, require_permission, CurrentUser
 from utils.pagination import PaginationParams, PaginatedResponse
+from config import settings
+from utils import pdf_generator
 from utils import pdf_generator
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 # PDF feature flag
+import io
 PDF_ENABLED = os.getenv("BOOKING_PDF_ENABLED", "false").lower() in {"1", "true", "yes"}
 
 router = APIRouter(prefix="/bookings", tags=["Booking Management"])
@@ -134,6 +138,46 @@ async def get_bookings(
 
     service = BookingService(db, redis_client)
     return await service.get_bookings(filters)
+
+
+@router.get("/{booking_id}/voucher")
+async def download_booking_voucher(
+    booking_id: uuid.UUID,
+    session: Session = Depends(get_session),
+    current_user: CurrentUser = Depends(require_permission("booking", "read", "bookings"))
+):
+    """Download booking voucher as PDF"""
+    if not settings.pdf_enabled or not pdf_generator.have_reportlab():
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={
+                "type": "pdf_not_enabled",
+                "detail": "PDF generation is disabled or reportlab is not installed."
+            }
+        )
+    
+    booking_service = BookingService(session)
+    booking = await booking_service.get_booking(booking_id)
+    
+    if not booking:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Booking not found"
+        )
+    
+    # Convert booking to dict for PDF generation
+    booking_dict = booking.model_dump() if hasattr(booking, 'model_dump') else booking.__dict__
+    
+    # Generate PDF
+    pdf_buffer = io.BytesIO()
+    pdf_generator.generate_booking_voucher(booking_dict, pdf_buffer)
+    pdf_buffer.seek(0)
+    
+    return StreamingResponse(
+        io.BytesIO(pdf_buffer.getvalue()),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=booking_voucher_{booking_id}.pdf"}
+    )
 
 
 @router.get("/{booking_id}", response_model=BookingResponse)

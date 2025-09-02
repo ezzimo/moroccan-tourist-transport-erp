@@ -25,7 +25,6 @@ from utils.locking import acquire_booking_lock, release_booking_lock
 from services.pricing_service import PricingService
 from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime, timedelta
-from decimal import Decimal
 from math import ceil
 import redis
 import uuid
@@ -425,6 +424,29 @@ class BookingService:
 
         return False
 
+    async def generate_voucher_pdf(self, booking_id: uuid.UUID) -> bytes:
+        """Generate booking voucher PDF"""
+        from config import settings
+        from utils import pdf_generator
+        
+        if not settings.pdf_enabled or not pdf_generator.have_reportlab():
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="PDF generation is not available"
+            )
+        
+        booking = await self.get_booking(booking_id)
+        if not booking:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        # Convert booking to dict for PDF generation
+        booking_dict = booking.model_dump() if hasattr(booking, 'model_dump') else booking.__dict__
+        
+        return pdf_generator.generate_booking_confirmation(booking_dict)
+    
     async def _verify_customer_exists(self, customer_id: uuid.UUID) -> bool:
         """Verify customer exists in CRM service"""
         try:

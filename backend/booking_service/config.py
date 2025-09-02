@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     default_page_size: int = 20
     max_page_size: int = 100
     
+    # PDF Generation
+    pdf_enabled: bool = Field(default=False, description="Enable PDF generation features")
+    
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
 

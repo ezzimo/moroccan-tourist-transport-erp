@@ -97,6 +97,7 @@ services:
       - JWT_ISSUER=auth-service
       - JWT_ALLOWED_AUDIENCES=["mtterp","booking_service"]
       - JWT_DISABLE_AUDIENCE_CHECK=false
+      - BOOKING_PDF_ENABLED=true
     depends_on:
     - db_booking
     healthcheck:
