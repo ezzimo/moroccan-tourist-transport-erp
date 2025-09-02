@@ -8,6 +8,9 @@ from config import settings
 from typing import Optional, Dict, Any
 import httpx
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 security = HTTPBearer()
