@@ -49,7 +49,7 @@ async def create_booking(
     # Optional: resilient customer verification (non-strict by default)
     auth_header = request.headers.get("Authorization")
     try:
-        _ = await get_customer_by_id(booking_data.customer_id, token=auth_header)
+        _ = await get_customer_by_id(booking_data.customer_id, auth_header=auth_header)
         # We do not hard-fail if None; the service layer can decide how to tag unverified customers.
     except CustomerVerificationError as e:
         logger.warning("Customer verification failure: %s (%s)", e, e.type)

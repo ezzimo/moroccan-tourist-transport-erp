@@ -23,15 +23,35 @@ class CustomerVerificationError(Exception):
         self.status = status
 
 
-async def get_customer_by_id(customer_id: UUID, token: Optional[str] = None) -> Optional[dict[str, Any]]:
+def extract_bearer_token(auth_header: Optional[str]) -> Optional[str]:
+    """Extract bearer token from Authorization header"""
+    if not auth_header:
+        return None
+    
+    if auth_header.startswith("Bearer "):
+        return auth_header[7:]  # Remove "Bearer " prefix
+    
+    return None
+
+
+async def get_customer_by_id(customer_id: UUID, token: Optional[str] = None, auth_header: Optional[str] = None) -> Optional[dict[str, Any]]:
     """
     Try to fetch a single customer; return dict if found, None if 404.
     Raise CustomerVerificationError for auth problems if STRICT, else None.
     Network errors/timeouts are logged and return None when not STRICT.
+    
+    Args:
+        customer_id: Customer UUID to lookup
+        token: Bearer token (without "Bearer " prefix)
+        auth_header: Full Authorization header value (e.g., "Bearer xyz123")
     """
     url = f"{CUSTOMER_SVC_BASE}/customers/{customer_id}"
     headers = {"Accept": "application/json"}
-    if token:
+    
+    # Use auth_header if provided, otherwise construct from token
+    if auth_header:
+        headers["Authorization"] = auth_header
+    elif token:
         headers["Authorization"] = f"Bearer {token}"
 
     logger.info("Verifying customer %s at %s", customer_id, url)
@@ -76,14 +96,14 @@ async def get_customer_by_id(customer_id: UUID, token: Optional[str] = None) -> 
     return None
 
 
-async def verify_customer_exists(customer_id: UUID, token: Optional[str] = None) -> bool:
+async def verify_customer_exists(customer_id: UUID, token: Optional[str] = None, auth_header: Optional[str] = None) -> bool:
     """
     Simple boolean check if customer exists.
     Returns True if customer found, False otherwise.
     Only raises in strict mode for auth/service errors.
     """
     try:
-        customer = await get_customer_by_id(customer_id, token)
+        customer = await get_customer_by_id(customer_id, token, auth_header)
         return customer is not None
     except CustomerVerificationError:
         # Re-raise in strict mode
