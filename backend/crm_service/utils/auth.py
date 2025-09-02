@@ -32,7 +32,40 @@ async def verify_auth_token(token: str) -> Optional[Dict[str, Any]]:
     """Verify token with auth service"""
     try:
         # First try local JWT verification for performance
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        # Handle audience verification based on configuration
+        decode_options = {"verify_aud": not settings.jwt_disable_audience_check}
+        
+        if settings.jwt_disable_audience_check:
+            payload = jwt.decode(
+                token, 
+                settings.secret_key, 
+                algorithms=[settings.algorithm],
+                options=decode_options
+            )
+        else:
+            # Try each allowed audience
+            last_error = None
+            for audience in settings.jwt_allowed_audiences:
+                try:
+                    payload = jwt.decode(
+                        token,
+                        settings.secret_key,
+                        algorithms=[settings.algorithm],
+                        audience=audience,
+                        issuer=settings.jwt_issuer
+                    )
+                    break
+                except jwt.JWTClaimsError as e:
+                    last_error = e
+                    continue
+                except jwt.JWTError as e:
+                    last_error = e
+                    break
+            else:
+                # No audience worked, raise the last error
+                if last_error:
+                    raise last_error
+        
         print(f"Local JWT verification successful: {payload.get('email', 'unknown')}")
         return payload
     except JWTError as e:
