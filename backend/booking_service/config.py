@@ -2,6 +2,7 @@
 Configuration settings for the booking microservice
 """
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
 from typing import List
 
 
@@ -36,6 +37,9 @@ class Settings(BaseSettings):
     # Pagination
     default_page_size: int = 20
     max_page_size: int = 100
+    
+    # PDF Generation
+    # pdf_enabled: bool = False  # default off
     
     # PDF Generation
     pdf_enabled: bool = Field(default=False, description="Enable PDF generation features")
