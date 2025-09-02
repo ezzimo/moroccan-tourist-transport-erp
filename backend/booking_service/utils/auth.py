@@ -5,6 +5,7 @@ from fastapi import Depends, HTTPException, status, Security, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from jose.exceptions import JWTClaimsError
+from jose.exceptions import JWTClaimsError
 from config import settings
 from typing import Optional, Dict, Any, List
 import httpx
@@ -80,15 +81,45 @@ def verify_jwt_token(token: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logger.error(f"JWT verification error: {e}")
         return None
-
-
-async def verify_auth_token(token: str) -> Optional[Dict[str, Any]]:
-    """Verify token with local JWT verification and remote fallback"""
-    # First try local JWT verification
-    payload = verify_jwt_token(token)
-    if payload:
-        logger.debug(f"Local JWT verification successful: {payload.get('email', 'unknown')}")
-        return payload
+        # Get allowed audiences
+        allowed_audiences = settings.jwt_allowed_audiences
+        
+        if settings.jwt_disable_audience_check:
+            # Decode without audience verification
+            payload = jwt.decode(
+                token,
+                settings.jwt_secret_key,
+                algorithms=[settings.jwt_algorithm],
+                options={"verify_aud": False},
+                issuer=settings.jwt_issuer
+            )
+            logger.debug(f"JWT decoded without audience check for user: {payload.get('email', 'unknown')}")
+            return payload
+        
+        # Try each allowed audience
+        last_error = None
+        for audience in allowed_audiences:
+            try:
+                payload = jwt.decode(
+                    token,
+                    settings.jwt_secret_key,
+                    algorithms=[settings.jwt_algorithm],
+                    audience=audience,
+                    issuer=settings.jwt_issuer
+                )
+                logger.debug(f"JWT verified with audience '{audience}' for user: {payload.get('email', 'unknown')}")
+                return payload
+            except JWTClaimsError as e:
+                last_error = e
+                continue
+            except JWTError as e:
+                last_error = e
+                break
+        
+        if last_error:
+            logger.warning(f"JWT verification failed: {last_error}")
+        return None
+        
     
     # Fallback to remote auth service verification
     try:

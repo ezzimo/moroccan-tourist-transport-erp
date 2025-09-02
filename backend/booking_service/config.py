@@ -27,6 +27,15 @@ class Settings(BaseSettings):
     jwt_audience: str = "mtterp"
     jwt_issuer: str = "auth-service"
     
+    # JWT Allowed Audiences (JSON array or comma-separated)
+    # Examples:
+    # JWT_ALLOWED_AUDIENCES=["mtterp","booking_service"]
+    # JWT_ALLOWED_AUDIENCES=mtterp,booking_service
+    jwt_allowed_audiences: List[str] = ["mtterp"]
+    
+    # Disable audience check for development (use with caution)
+    jwt_disable_audience_check: bool = False
+    
     # CORS
     allowed_origins: List[str] = ["http://localhost:3000", "http://localhost:8080"]
     
