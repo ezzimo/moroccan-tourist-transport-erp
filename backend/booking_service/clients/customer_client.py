@@ -54,43 +54,43 @@ async def get_customer_by_id(customer_id: UUID, token: Optional[str] = None, aut
     elif token:
         headers["Authorization"] = f"Bearer {token}"
 
-    logger.info("Verifying customer %s at %s", customer_id, url)
+    logger.debug("Verifying customer %s at %s", customer_id, url)
 
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             resp = await client.get(url, headers=headers)
     except Exception as e:
-        logger.warning("Customer lookup network error: %s %s -> %s", "GET", url, e)
+        logger.warning("Customer lookup network error for %s: %s", customer_id, str(e)[:100])
         if CUSTOMER_VERIFY_STRICT:
             raise CustomerVerificationError("Customer lookup failed", "customer_service_unreachable", 503)
         return None
 
-    logger.info("Customer lookup response: %s", resp.status_code)
+    logger.debug("Customer lookup response for %s: %s", customer_id, resp.status_code)
 
     if resp.status_code == 200:
         try:
             customer_data = resp.json()
-            logger.info("Customer verified: %s (%s)", customer_data.get("email", "unknown"), customer_data.get("full_name", "unknown"))
+            logger.debug("Customer verified: %s (%s)", customer_data.get("email", "unknown"), customer_data.get("full_name", "unknown"))
             return customer_data
         except Exception:
-            logger.warning("Customer lookup invalid JSON body: %s", resp.text[:512])
+            logger.warning("Customer lookup invalid JSON for %s: %s", customer_id, resp.text[:100])
             if CUSTOMER_VERIFY_STRICT:
                 raise CustomerVerificationError("Invalid customer response", "customer_service_invalid", 502)
             return None
 
     if resp.status_code == 404:
-        logger.warning("Customer not found: %s", customer_id)
+        logger.info("Customer not found: %s", customer_id)
         if CUSTOMER_VERIFY_STRICT:
             raise CustomerVerificationError("Customer not found", "customer_not_found", 422)
         return None
 
     if resp.status_code in (401, 403):
-        logger.warning("Customer lookup auth error (%s): %s", resp.status_code, resp.text[:512])
+        logger.warning("Customer lookup auth error (%s) for %s: %s", resp.status_code, customer_id, resp.text[:100])
         if CUSTOMER_VERIFY_STRICT:
             raise CustomerVerificationError("Not authorized to verify customer", "customer_forbidden", 403)
         return None
 
-    logger.warning("Customer lookup unexpected status %s: %s", resp.status_code, resp.text[:512])
+    logger.warning("Customer lookup unexpected status %s for %s: %s", resp.status_code, customer_id, resp.text[:100])
     if CUSTOMER_VERIFY_STRICT:
         raise CustomerVerificationError("Customer service error", "customer_service_error", 502)
     return None

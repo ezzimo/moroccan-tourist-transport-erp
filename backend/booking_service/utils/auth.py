@@ -5,7 +5,6 @@ from fastapi import Depends, HTTPException, status, Security, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from jose.exceptions import JWTClaimsError
-from jose.exceptions import JWTClaimsError
 from config import settings
 from typing import Optional, Dict, Any, List
 import httpx
@@ -74,56 +73,20 @@ def verify_jwt_token(token: str) -> Optional[Dict[str, Any]]:
                 last_error = e
                 break
         
-        if last_error:
-            logger.warning(f"JWT verification failed: {last_error}")
-        return None
+        # Log consolidated error once
+        logger.warning(f"JWT local verification failed for all audiences {allowed_audiences}: {last_error}")
         
     except Exception as e:
         logger.error(f"JWT verification error: {e}")
-        return None
-        # Get allowed audiences
-        allowed_audiences = settings.jwt_allowed_audiences
         
-        if settings.jwt_disable_audience_check:
-            # Decode without audience verification
-            payload = jwt.decode(
-                token,
-                settings.jwt_secret_key,
-                algorithms=[settings.jwt_algorithm],
-                options={"verify_aud": False},
-                issuer=settings.jwt_issuer
-            )
-            logger.debug(f"JWT decoded without audience check for user: {payload.get('email', 'unknown')}")
-            return payload
-        
-        # Try each allowed audience
-        last_error = None
-        for audience in allowed_audiences:
-            try:
-                payload = jwt.decode(
-                    token,
-                    settings.jwt_secret_key,
-                    algorithms=[settings.jwt_algorithm],
-                    audience=audience,
-                    issuer=settings.jwt_issuer
-                )
-                logger.debug(f"JWT verified with audience '{audience}' for user: {payload.get('email', 'unknown')}")
-                return payload
-            except JWTClaimsError as e:
-                last_error = e
-                continue
-            except JWTError as e:
-                last_error = e
-                break
-        
-        if last_error:
-            logger.warning(f"JWT verification failed: {last_error}")
-        return None
-        
-    
     # Fallback to remote auth service verification
+    return await _verify_with_auth_service(token)
+
+
+async def _verify_with_auth_service(token: str) -> Optional[Dict[str, Any]]:
+    """Fallback verification with remote auth service"""
     try:
-        logger.debug(f"Local JWT failed, trying remote auth service: {settings.auth_service_url}")
+        logger.debug(f"Trying remote auth service: {settings.auth_service_url}")
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{settings.auth_service_url}/api/v1/auth/me",
@@ -135,13 +98,11 @@ def verify_jwt_token(token: str) -> Optional[Dict[str, Any]]:
                 logger.debug(f"Remote auth verification successful: {user_data.get('email', 'unknown')}")
                 return user_data
             else:
-                logger.warning(f"Remote auth service returned {response.status_code}: {response.text}")
+                logger.warning(f"Remote auth service returned {response.status_code}: {response.text[:200]}")
     except Exception as e:
         logger.error(f"Remote auth service error: {e}")
     
     return None
-
-
 async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Security(security)
@@ -157,7 +118,11 @@ async def get_current_user(
         raise credentials_exception
     
     token = credentials.credentials
-    user_data = await verify_auth_token(token)
+    user_data = verify_jwt_token(token)
+    
+    # If local JWT failed, try remote verification
+    if not user_data:
+        user_data = await _verify_with_auth_service(token)
     
     if not user_data:
         raise credentials_exception
