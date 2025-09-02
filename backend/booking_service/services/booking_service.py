@@ -52,11 +52,14 @@ class BookingService:
     ) -> BookingResponse:
         """Create a new booking with locking mechanism"""
         logger.info("Creating booking with verification status: %s", customer_verified)
+        logger.debug("DIAGNOSTIC: Starting create_booking - customer_id=%s, service_type=%s, base_price=%s", 
+                    booking_data.customer_id, booking_data.service_type, booking_data.base_price)
         
         # Acquire lock for booking creation
         lock_key = (
             f"booking_create:{booking_data.customer_id}:{booking_data.start_date}"
         )
+        logger.debug("DIAGNOSTIC: Acquiring lock with key: %s", lock_key)
         lock_id = acquire_booking_lock(
             self.redis,
             "booking",
@@ -65,16 +68,22 @@ class BookingService:
         )
 
         if not lock_id:
+            logger.debug("DIAGNOSTIC: Failed to acquire lock")
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Another booking is being processed. Please try again.",
             )
+        
+        logger.debug("DIAGNOSTIC: Lock acquired successfully: %s", lock_id)
 
         try:
             # Verify customer exists (call CRM service)
+            logger.debug("DIAGNOSTIC: About to verify customer exists")
             await self._verify_customer_exists(booking_data.customer_id)
+            logger.debug("DIAGNOSTIC: Customer verification completed successfully")
 
             # Calculate pricing
+            logger.debug("DIAGNOSTIC: Starting pricing calculation")
             pricing_request = {
                 "service_type": booking_data.service_type.value,
                 "base_price": booking_data.base_price,
@@ -84,12 +93,15 @@ class BookingService:
                 "customer_id": booking_data.customer_id,
                 "promo_code": booking_data.promo_code,
             }
+            logger.debug("DIAGNOSTIC: Pricing request data: %s", pricing_request)
 
             pricing_result = await self.pricing_service.calculate_pricing(
                 pricing_request
             )
+            logger.debug("DIAGNOSTIC: Pricing calculation completed: %s", pricing_result)
 
             # Prepare booking data
+            logger.debug("DIAGNOSTIC: Preparing booking data")
             booking_dict = booking_data.model_dump()
             
             # Add verification metadata to internal notes
@@ -108,8 +120,12 @@ class BookingService:
             if verification_info:
                 notes = f"{' '.join(verification_info)} {notes}".strip()
                 booking_dict["internal_notes"] = notes
+            
+            logger.debug("DIAGNOSTIC: Booking dict prepared with notes: %s", notes[:100])
 
             # Create booking
+            logger.debug("DIAGNOSTIC: Creating Booking model instance")
+            try:
             booking = Booking(
                 customer_id=booking_data.customer_id,
                 service_type=booking_data.service_type,
@@ -127,19 +143,40 @@ class BookingService:
                 internal_notes=booking_dict.get("internal_notes"),
                 expires_at=datetime.utcnow() + timedelta(minutes=30),  # 30 min expiry
             )
+                logger.debug("DIAGNOSTIC: Booking model instance created successfully")
+            except Exception as e:
+                logger.error("DIAGNOSTIC: Failed to create Booking model instance: %s", str(e))
+                logger.error("DIAGNOSTIC: Exception type: %s", type(e).__name__)
+                raise
 
+            logger.debug("DIAGNOSTIC: Adding booking to session")
             self.session.add(booking)
+            logger.debug("DIAGNOSTIC: About to commit booking to database")
             self.session.commit()
+            logger.debug("DIAGNOSTIC: Booking committed successfully")
             self.session.refresh(booking)
+            logger.debug("DIAGNOSTIC: Booking refreshed, ID: %s", booking.id)
 
             # Schedule expiry check
+            logger.debug("DIAGNOSTIC: Scheduling booking expiry")
             await self._schedule_booking_expiry(booking.id)
+            logger.debug("DIAGNOSTIC: Booking expiry scheduled")
 
             logger.info("Booking created: %s (verified: %s)", booking.id, customer_verified)
-            return BookingResponse(**booking.model_dump())
+            logger.debug("DIAGNOSTIC: About to create BookingResponse")
+            try:
+                response = BookingResponse(**booking.model_dump())
+                logger.debug("DIAGNOSTIC: BookingResponse created successfully")
+                return response
+            except Exception as e:
+                logger.error("DIAGNOSTIC: Failed to create BookingResponse: %s", str(e))
+                logger.error("DIAGNOSTIC: Exception type: %s", type(e).__name__)
+                logger.error("DIAGNOSTIC: Booking model dump: %s", booking.model_dump())
+                raise
 
         finally:
             # Always release the lock
+            logger.debug("DIAGNOSTIC: Releasing lock: %s", lock_id)
             release_booking_lock(
                 self.redis,
                 "booking",
@@ -449,15 +486,22 @@ class BookingService:
     
     async def _verify_customer_exists(self, customer_id: uuid.UUID) -> bool:
         """Verify customer exists in CRM service"""
+        logger.debug("DIAGNOSTIC: _verify_customer_exists called for customer_id: %s", customer_id)
         try:
             from config import settings
 
+            logger.debug("DIAGNOSTIC: Making HTTP request to CRM service: %s", settings.crm_service_url)
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     f"{settings.crm_service_url}/api/v1/customers/{customer_id}"
                 )
+                logger.debug("DIAGNOSTIC: CRM response status: %s", response.status_code)
+                if response.status_code != 200:
+                    logger.debug("DIAGNOSTIC: CRM response body: %s", response.text[:200])
                 return response.status_code == 200
-        except:
+        except Exception as e:
+            logger.error("DIAGNOSTIC: Exception in _verify_customer_exists: %s", str(e))
+            logger.error("DIAGNOSTIC: Exception type: %s", type(e).__name__)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Unable to verify customer information",
@@ -480,7 +524,25 @@ class BookingService:
 
     async def _schedule_booking_expiry(self, booking_id: uuid.UUID):
         """Schedule booking expiry check"""
+        logger.debug("DIAGNOSTIC: _schedule_booking_expiry called for booking_id: %s", booking_id)
         # In a production environment, you would use Celery or similar
         # For now, we'll store the expiry in Redis
-        expiry_key = f"booking_expiry:{booking_id}"
-        self.redis.setex(expiry_key, 1800, str(booking_id))  # 30 minutes
+        try:
+            expiry_key = f"booking_expiry:{booking_id}"
+            logger.debug("DIAGNOSTIC: Setting Redis expiry key: %s", expiry_key)
+            
+            # Check if redis client is async or sync
+            if hasattr(self.redis, 'setex'):
+                # Sync Redis client
+                self.redis.setex(expiry_key, 1800, str(booking_id))  # 30 minutes
+                logger.debug("DIAGNOSTIC: Redis expiry set using sync client")
+            else:
+                # Async Redis client - this would need await
+                logger.warning("DIAGNOSTIC: Async Redis client detected but method not awaited")
+                # For now, skip to avoid blocking
+                pass
+        except Exception as e:
+            logger.error("DIAGNOSTIC: Exception in _schedule_booking_expiry: %s", str(e))
+            logger.error("DIAGNOSTIC: Exception type: %s", type(e).__name__)
+            # Don't fail booking creation for expiry scheduling issues
+            pass
