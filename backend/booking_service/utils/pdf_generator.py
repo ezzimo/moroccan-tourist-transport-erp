@@ -14,16 +14,38 @@ from reportlab.platypus import (
     Image,
 )
 from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-import qrcode
-from io import BytesIO
 from datetime import datetime
 from config import settings
 from models import Booking
 from typing import List, Optional
 import uuid
+def _import_reportlab():
+    """Lazy import of reportlab dependencies"""
+    try:
+        from reportlab.lib.pagesizes import letter, A4  # type: ignore
+        from reportlab.pdfgen import canvas            # type: ignore
+        from reportlab.lib.units import cm             # type: ignore
+        return {"letter": letter, "A4": A4, "canvas": canvas, "cm": cm}
+    except Exception as e:
+        raise ImportError("reportlab is not installed") from e
 
 
+def have_reportlab() -> bool:
+    """Check if reportlab is available"""
+    try:
+        _import_reportlab()
+        return True
+    except Exception:
+        return False
+
+
+
+
+    libs = _import_reportlab()
+    canvas = libs["canvas"]
+    A4 = libs["A4"]
+    cm = libs["cm"]
+    
 def generate_qr_code(data: str) -> BytesIO:
     """Generate QR code for booking reference"""
     qr = qrcode.QRCode(
@@ -47,6 +69,11 @@ def generate_booking_voucher(
     booking: Booking, reservation_items: List = None
 ) -> BytesIO:
     """Generate PDF voucher for booking"""
+    libs = _import_reportlab()
+    canvas = libs["canvas"]
+    A4 = libs["A4"]
+    cm = libs["cm"]
+    
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,

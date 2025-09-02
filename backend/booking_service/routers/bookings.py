@@ -4,6 +4,7 @@ Booking management routes
 import uuid
 import logging
 import redis.asyncio as redis
+import os
 
 from fastapi import APIRouter, Depends, Body, Query
 from sqlmodel import Session
@@ -18,9 +19,12 @@ from schemas.booking_filters import BookingFilters
 from schemas.booking import BookingCreate, BookingUpdate, BookingResponse
 from utils.auth import get_current_user, require_permission, CurrentUser
 from utils.pagination import PaginationParams, PaginatedResponse
+from utils import pdf_generator
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+# PDF feature flag
+PDF_ENABLED = os.getenv("BOOKING_PDF_ENABLED", "false").lower() in {"1", "true", "yes"}
 
 router = APIRouter(prefix="/bookings", tags=["Booking Management"])
 
@@ -35,6 +39,15 @@ async def create_booking(
     current_user: CurrentUser = Depends(get_current_user),
     _: None = Depends(require_permission("booking", "create", "bookings"))
 ):
+    if not PDF_ENABLED or not pdf_generator.have_reportlab():
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={
+                "type": "pdf_not_enabled", 
+                "detail": "PDF generation is disabled or reportlab is not installed."
+            }
+        )
+    
     """Create a new booking"""
     logger.info(f"Creating booking for customer {booking_data.customer_id}")
     
@@ -110,8 +123,7 @@ async def get_bookings(
         service_type=service_type,
         status=status,
         payment_status=payment_status,
-        start_date_from=start_date_from,
-        start_date_to=start_date_to,
+    pdf_generator.generate_voucher_pdf(booking.model_dump(), pdf_stream)
         created_from=created_from,
         created_to=created_to,
         pax_count_min=pax_count_min,
