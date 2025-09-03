@@ -4,9 +4,7 @@ frontend/src/fleet
 frontend/src/hr
 frontend/src/notification
 frontend/src/inventory
-backend/fleet_service/
 backend/hr_service/
-backend/financial_service/
 backend/inventory_service/
 backend/qa_service/
 backend/notification_service/
