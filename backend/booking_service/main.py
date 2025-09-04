@@ -75,8 +75,10 @@ async def internal_server_error_handler(request: Request, exc: Exception):
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and create tables"""
-    create_db_and_tables()
-    logger.info("Booking service database initialized successfully")
+    # NOTE: Database creation is now handled by Alembic migrations.
+    # This function is left for potential dev/testing use, but not called on startup.
+    # create_db_and_tables()
+    logger.info("Booking service started. DB schema managed by Alembic.")
 
 
 @app.get("/health")
