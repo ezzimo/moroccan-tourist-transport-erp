@@ -2,7 +2,7 @@
 Database configuration and session management
 """
 from sqlmodel import SQLModel, create_engine, Session
-from .config import settings
+from config import settings
 import redis
 from typing import Generator
 
