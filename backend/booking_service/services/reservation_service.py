@@ -4,8 +4,8 @@ Reservation service for managing booking items and components
 
 from sqlmodel import Session, select
 from fastapi import HTTPException, status
-from models import Booking, BookingStatus, ReservationItem
-from schemas.booking import (
+from ..models import Booking, BookingStatus, ReservationItem
+from ..schemas.booking import (
     ReservationItemCreate,
     ReservationItemUpdate,
     ReservationItemResponse,

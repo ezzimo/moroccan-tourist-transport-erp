@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from typing import Generic, List, TypeVar
 from sqlmodel import Session, select, func
 
-from config import settings
+from ..config import settings
 
 T = TypeVar("T")
 

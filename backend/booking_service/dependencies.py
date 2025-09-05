@@ -5,7 +5,7 @@ from typing import Generator
 from sqlmodel import Session, create_engine
 from functools import lru_cache
 import redis.asyncio as redis
-from config import settings
+from .config import settings
 
 # Database engine (singleton)
 @lru_cache()
@@ -43,3 +43,17 @@ async def get_redis() -> redis.Redis:
         _redis_client = redis.from_url(redis_url, decode_responses=True)
     
     return _redis_client
+
+
+# --- Header Dependencies ---
+
+from typing import Optional
+from fastapi import Header
+
+def get_optional_idempotency_key(
+    idempotency_key: Optional[str] = Header(None, alias="Idempotency-Key")
+) -> Optional[str]:
+    """
+    Dependency to optionally extract an Idempotency-Key header.
+    """
+    return idempotency_key

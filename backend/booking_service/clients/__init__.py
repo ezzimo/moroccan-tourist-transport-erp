@@ -1,30 +1,6 @@
 """
-Clients for interacting with external services.
+Client modules for external service communication
 """
-from .base import (
-    ServiceClientBase,
-    ExternalServiceError,
-    IntegrationAuthError,
-    IntegrationBadRequest,
-    IntegrationNotFound,
-    IntegrationTimeoutError,
-)
-from .customer_client import get_customer_by_id, verify_customer_exists, CustomerVerificationError
-from .fleet_client import FleetServiceClient
-from .payment_client import PaymentServiceClient
-from .notification_client import NotificationServiceClient
+from .customer_client import get_customer_by_id, CustomerVerificationError
 
-__all__ = [
-    "ServiceClientBase",
-    "ExternalServiceError",
-    "IntegrationAuthError",
-    "IntegrationBadRequest",
-    "IntegrationNotFound",
-    "IntegrationTimeoutError",
-    "get_customer_by_id",
-    "verify_customer_exists",
-    "CustomerVerificationError",
-    "FleetServiceClient",
-    "PaymentServiceClient",
-    "NotificationServiceClient",
-]
+__all__ = ["get_customer_by_id", "CustomerVerificationError"]

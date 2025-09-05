@@ -4,9 +4,9 @@ Availability service for resource scheduling and availability checks
 
 from sqlmodel import Session, select, and_
 from fastapi import HTTPException, status
-from models.enums import ResourceType
-from models.availability_slot import AvailabilitySlot
-from schemas.booking import (
+from ..models.enums import ResourceType
+from ..models.availability_slot import AvailabilitySlot
+from ..schemas.booking import (
     AvailabilityRequest,
     AvailabilityResponse,
     ResourceAvailability,

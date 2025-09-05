@@ -1,16 +1,17 @@
 """
 Booking service for booking management operations
 """
+from __future__ import annotations
 
 from sqlmodel import Session, select, and_, or_, func
 from fastapi import HTTPException, status
-from models import (
+from ..models import (
     Booking,
     BookingStatus,
     PaymentStatus,
     ReservationItem,
 )
-from schemas.booking import (
+from ..schemas.booking import (
     BookingCreate,
     BookingUpdate,
     BookingResponse,
@@ -19,10 +20,10 @@ from schemas.booking import (
     BookingCancel,
     BookingSearch,
 )
-from schemas.booking_filters import BookingFilters
-from utils.pagination import PaginationParams, paginate_query
-from utils.locking import acquire_booking_lock, release_booking_lock
-from services.pricing_service import PricingService
+from ..schemas.booking_filters import BookingFilters
+from ..utils.pagination import PaginationParams, paginate_query
+from ..utils.locking import acquire_booking_lock, release_booking_lock
+from .pricing_service import PricingService
 from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime, timedelta
 from math import ceil
@@ -73,7 +74,7 @@ class BookingService:
 
         try:
             # Calculate pricing
-            from schemas.pricing import PricingRequest
+            from ..schemas.pricing import PricingRequest
             pricing_request = PricingRequest(
                 service_type=booking_data.service_type.value,
                 base_price=booking_data.base_price,
@@ -260,6 +261,117 @@ class BookingService:
             "total": total,
             "pages": ceil(total / filters.size) if filters.size else 1
         }
+
+    async def confirm_atomic(
+        self,
+        booking_id: uuid.UUID,
+        payload: "BookingConfirmPayload",
+        settings: "Settings",
+        idempotency_key: Optional[str] = None,
+    ) -> "BookingConfirmationResponse":
+        from datetime import datetime, timezone
+        from ..clients import (
+            FleetServiceClient,
+            PaymentServiceClient,
+            NotificationServiceClient,
+            ExternalServiceError,
+            IntegrationAuthError,
+            IntegrationNotFound,
+            IntegrationBadRequest,
+        )
+        from ..models.enums import BookingStatus, PaymentStatus
+        from ..schemas.booking import BookingConfirmationResponse
+
+        # 1. Instantiate clients
+        fleet_client = FleetServiceClient(base_url=settings.fleet_service_url)
+        payment_client = PaymentServiceClient(
+            base_url=settings.payment_service_url, api_key=settings.payment_api_key
+        )
+        notification_client = NotificationServiceClient(
+            base_url=settings.notification_service_url
+        )
+
+        # 2. Lock and Validate Phase
+        try:
+            booking = self.session.exec(select(Booking).where(Booking.id == booking_id).with_for_update(nowait=True)).one_or_none()
+        except Exception:
+            raise HTTPException(status_code=409, detail="Booking is currently being processed by another request.")
+
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found.")
+        if booking.status != BookingStatus.PENDING:
+            raise HTTPException(status_code=400, detail=f"Booking is not in a confirmable state (status: {booking.status}).")
+        if not booking.start_time or not booking.end_time:
+            raise HTTPException(status_code=400, detail="Booking is missing start or end time.")
+        if not booking.total_price or not booking.currency:
+            raise HTTPException(status_code=400, detail="Booking is missing price information.")
+
+        # 3. Orchestration & Compensation
+        vehicle_reserved = False
+        try:
+            # Reserve vehicle
+            await fleet_client.reserve_vehicle(
+                vehicle_id=payload.vehicle_id,
+                booking_id=booking.id,
+                idempotency_key=idempotency_key,
+            )
+            vehicle_reserved = True
+
+            # Confirm payment
+            await payment_client.confirm_payment(
+                reference=payload.payment_reference,
+                expected_amount=booking.total_price,
+                currency=booking.currency,
+                idempotency_key=idempotency_key,
+            )
+
+        except Exception as e:
+            # If any external service fails, compensate and re-raise
+            if vehicle_reserved:
+                try:
+                    await fleet_client.release_vehicle(
+                        vehicle_id=payload.vehicle_id, booking_id=booking.id
+                    )
+                except Exception as comp_exc:
+                    logger.error(f"Failed to compensate and release vehicle {payload.vehicle_id}: {comp_exc}")
+
+            # Re-raise the original exception to be handled by the router
+            raise e
+
+        # 4. Finalize Phase
+        booking.status = BookingStatus.CONFIRMED
+        booking.confirmed_at = datetime.now(timezone.utc)
+        booking.vehicle_id = payload.vehicle_id
+        booking.driver_id = payload.driver_id
+        booking.payment_status = PaymentStatus.PAID
+        booking.payment_reference = payload.payment_reference
+        if payload.internal_notes:
+            booking.internal_notes = payload.internal_notes
+
+        self.session.add(booking)
+        self.session.commit()
+        self.session.refresh(booking)
+
+        # 5. Notification Phase (Best-effort)
+        notification_status = "SENT"
+        try:
+            await notification_client.send_booking_confirmation_email(
+                recipient_email=booking.lead_passenger_email,
+                booking_payload=booking.model_dump(mode='json'),
+            )
+        except Exception as e:
+            logger.error(f"Failed to send confirmation email for booking {booking.id}: {e}")
+            notification_status = "FAILED"
+
+        return BookingConfirmationResponse(
+            booking_id=booking.id,
+            status=booking.status,
+            confirmed_at=booking.confirmed_at,
+            vehicle_id=booking.vehicle_id,
+            driver_id=booking.driver_id,
+            payment_status=booking.payment_status,
+            notification_status=notification_status,
+        )
 
     async def update_booking(
         self, booking_id: uuid.UUID, booking_data: BookingUpdate
