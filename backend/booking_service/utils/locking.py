@@ -4,7 +4,7 @@ Locking utilities for preventing double-booking
 import redis
 from typing import Optional
 from datetime import datetime, timedelta
-from config import settings
+from ..config import settings
 import uuid
 
 

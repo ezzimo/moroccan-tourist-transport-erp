@@ -12,16 +12,22 @@ from fastapi import APIRouter, Depends, Body, Query, HTTPException, status, Requ
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session
 
-from database import get_session, get_redis
-from services.booking_service import BookingService
-from clients.customer_client import get_customer_by_id, CustomerVerificationError
-
-from schemas.booking_filters import BookingFilters
-from schemas.booking import BookingCreate, BookingUpdate, BookingResponse
-from utils.auth import get_current_user, require_permission, CurrentUser
-from utils.pagination import PaginatedResponse
-from config import settings
-from utils import pdf_generator
+from ..database import get_session
+from ..dependencies import get_redis, get_optional_idempotency_key
+from ..services.booking_service import BookingService
+from ..clients.customer_client import get_customer_by_id, CustomerVerificationError
+from ..schemas.booking_filters import BookingFilters
+from ..schemas.booking import (
+    BookingCreate,
+    BookingUpdate,
+    BookingResponse,
+    BookingConfirmPayload,
+    BookingConfirmationResponse,
+)
+from ..utils.auth import get_current_user, require_permission, CurrentUser
+from ..utils.pagination import PaginatedResponse
+from ..config import Settings, settings
+from ..utils import pdf_generator
 
 logger = logging.getLogger(__name__)
 
@@ -176,6 +182,50 @@ async def update_booking(
 ):
     service = BookingService(db, redis_client)
     return await service.update_booking(booking_id, booking_data, current_user.user_id)
+
+
+@router.post(
+    "/{booking_id}/confirm_atomic",
+    response_model=BookingConfirmationResponse,
+    status_code=200,
+)
+async def confirm_booking_atomic(
+    booking_id: uuid.UUID,
+    payload: BookingConfirmPayload,
+    idempotency_key: Optional[str] = Depends(get_optional_idempotency_key),
+    db: Session = Depends(get_session),
+    redis_client: redis.Redis = Depends(get_redis),
+    current_settings: Settings = Depends(lambda: settings),
+):
+    """
+    Atomically confirm a booking by orchestrating Fleet, Payment, and Notification services.
+    """
+    from ..clients.base import (
+        IntegrationAuthError,
+        IntegrationNotFound,
+        IntegrationBadRequest,
+        IntegrationTimeoutError,
+        ExternalServiceError,
+    )
+
+    try:
+        service = BookingService(db, redis_client)
+        return await service.confirm_atomic(
+            booking_id=booking_id,
+            payload=payload,
+            settings=current_settings,
+            idempotency_key=idempotency_key,
+        )
+    except IntegrationAuthError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+    except IntegrationNotFound as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except IntegrationBadRequest as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except IntegrationTimeoutError as e:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail=str(e))
+    except ExternalServiceError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(e))
 
 
 @router.post("/{booking_id}/confirm")
