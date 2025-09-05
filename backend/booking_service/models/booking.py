@@ -10,6 +10,7 @@ from typing import Optional, TYPE_CHECKING
 import uuid
 
 from sqlalchemy import Column, Numeric
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship  # << explicit SA relationship
 from sqlmodel import SQLModel, Field, Relationship
 
@@ -33,6 +34,24 @@ class Booking(SQLModel, table=True):
     # Booking Details
     service_type: Optional[ServiceType] = Field(index=True, default=None)
     status: BookingStatus = Field(default=BookingStatus.PENDING, index=True)
+
+    # New fields from BK-003
+    start_time: Optional[datetime] = Field(default=None, index=True)
+    end_time: Optional[datetime] = Field(default=None, index=False)
+    vehicle_id: Optional[uuid.UUID] = Field(default=None, index=True)
+    driver_id: Optional[uuid.UUID] = Field(default=None, index=True)
+    vehicle_type_requested: Optional[str] = Field(default=None, max_length=100)
+    pickup_location_text: Optional[str] = Field(default=None, max_length=500)
+    pickup_location_coords: Optional[dict] = Field(default=None, sa_column=Column(JSONB))
+    dropoff_location_text: Optional[str] = Field(default=None, max_length=500)
+    dropoff_location_coords: Optional[dict] = Field(default=None, sa_column=Column(JSONB))
+    estimated_duration_minutes: Optional[int] = Field(default=None)
+    estimated_distance_km: Optional[float] = Field(default=None)
+    booking_source: str = Field(default="web", index=True, max_length=50)
+    agent_id: Optional[uuid.UUID] = Field(default=None, index=True)
+    price_snapshot: Optional[dict] = Field(default=None, sa_column=Column(JSONB))
+    payment_provider: Optional[str] = Field(default=None, max_length=50)
+
 
     # Passenger Information
     pax_count: Optional[int] = Field(ge=1, le=50, default=None)
