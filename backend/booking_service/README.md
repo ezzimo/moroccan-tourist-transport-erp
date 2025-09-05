@@ -110,8 +110,8 @@ Key environment variables in `.env`:
 ```env
 DATABASE_URL=postgresql://postgres:password@localhost:5434/booking_db
 REDIS_URL=redis://localhost:6381/2
-AUTH_SERVICE_URL=http://localhost:8000
-CRM_SERVICE_URL=http://localhost:8001
+AUTH_SERVICE_URL=http://auth_service:8000
+CRM_SERVICE_URL=http://crm_app:8001
 SECRET_KEY=your-super-secret-key
 DEFAULT_CURRENCY=MAD
 BOOKING_EXPIRY_MINUTES=30

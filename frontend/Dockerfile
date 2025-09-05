@@ -6,6 +6,8 @@ COPY package*.json ./
 RUN npm install
 
 COPY . .
+# Set environment for Docker build
+ENV VITE_ENVIRONMENT=docker
 RUN npm run build
 
 # Stage 2: Serve with NGINX

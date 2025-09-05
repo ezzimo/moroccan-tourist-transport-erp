@@ -10,7 +10,7 @@ services:
       - REDIS_URL=redis://booking_redis:6379/2
       - AUTH_SERVICE_URL=http://auth_app:8000
       - CRM_SERVICE_URL=http://crm_app:8001
-      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - SECRET_KEY=super-secret-key-change-this
       - ENVIRONMENT=development
     depends_on:
       - booking_db

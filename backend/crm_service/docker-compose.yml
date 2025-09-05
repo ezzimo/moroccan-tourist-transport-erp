@@ -9,7 +9,7 @@ services:
       - DATABASE_URL=postgresql://postgres:password@crm_db:5432/crm_db
       - REDIS_URL=redis://crm_redis:6379/1
       - AUTH_SERVICE_URL=http://auth_app:8000
-      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - SECRET_KEY=super-secret-key-change-this
       - ENVIRONMENT=development
     depends_on:
       - crm_db

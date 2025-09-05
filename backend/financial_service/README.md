@@ -141,8 +141,8 @@ Key environment variables in `.env`:
 ```env
 DATABASE_URL=postgresql://postgres:password@localhost:5438/financial_db
 REDIS_URL=redis://localhost:6385/6
-AUTH_SERVICE_URL=http://localhost:8000
-BOOKING_SERVICE_URL=http://localhost:8002
+AUTH_SERVICE_URL=http://auth_service:8000
+BOOKING_SERVICE_URL=http://booking_app:8002
 DEFAULT_CURRENCY=MAD
 VAT_RATE=20.0
 INVOICE_DUE_DAYS=30

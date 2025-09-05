@@ -28,6 +28,8 @@ export function useIncidentStats(days = 30) {
   return useQuery({
     queryKey: ['incident-stats', days],
     queryFn: () => tourIncidentApi.getIncidentStats(days),
+    retry: 1,
+    retryDelay: 1000,
   });
 }
 

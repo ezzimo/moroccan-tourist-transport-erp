@@ -74,6 +74,10 @@ export default defineConfig(({ mode }) => {
         "/api/v1/tours": { target: `http://${HOST}:8010`, changeOrigin: true, secure: false },
         "/api/v1/packages": { target: `http://${HOST}:8010`, changeOrigin: true, secure: false },
         "/api/v1/guides": { target: `http://${HOST}:8010`, changeOrigin: true, secure: false },
+        "/api/v1/tour-incidents": { target: `http://${HOST}:8010`, changeOrigin: true, secure: false },
+        "/api/v1/tour-templates": { target: `http://${HOST}:8010`, changeOrigin: true, secure: false },
+        "/api/v1/tour-instances": { target: `http://${HOST}:8010`, changeOrigin: true, secure: false },
+        "/api/v1/itinerary": { target: `http://${HOST}:8010`, changeOrigin: true, secure: false },
 
         // ───────────────────── Keep LAST — fallback to Auth
         "/api/v1": { target: `http://${HOST}:8000`, changeOrigin: true, secure: false },

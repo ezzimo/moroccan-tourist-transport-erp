@@ -148,9 +148,9 @@ Key environment variables in `.env`:
 ```env
 DATABASE_URL=postgresql://postgres:password@localhost:5440/inventory_db
 REDIS_URL=redis://localhost:6387/8
-AUTH_SERVICE_URL=http://localhost:8000
-FLEET_SERVICE_URL=http://localhost:8004
-FINANCIAL_SERVICE_URL=http://localhost:8006
+AUTH_SERVICE_URL=http://auth_service:8000
+FLEET_SERVICE_URL=http://fleet_app:8004
+FINANCIAL_SERVICE_URL=http://financial_app:8006
 DEFAULT_CURRENCY=MAD
 LOW_STOCK_ALERT_THRESHOLD=0.2
 AUTO_REORDER_ENABLED=false

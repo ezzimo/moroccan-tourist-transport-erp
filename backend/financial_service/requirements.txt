@@ -35,3 +35,6 @@ jinja2>=3.1.2
 # Validation and utilities
 phonenumbers>=8.13.26
 python-slugify>=8.0.1
+
+alembic==1.13.2
+sqlalchemy>=2.0

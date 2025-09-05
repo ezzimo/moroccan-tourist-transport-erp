@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Edit, Trash2 } from 'lucide-react';
 import { ReservationItem } from '../types/reservation';
 import { useCreateReservationItem, useDeleteReservationItem } from '../hooks/useReservations';
-import { formatCurrency } from '../../utils/formatters';
+import { formatMoney } from '../../utils/number';
 
 interface ReservationItemsListProps {
   bookingId: string;
@@ -205,8 +205,8 @@ export default function ReservationItemsList({ bookingId, items }: ReservationIt
                 )}
                 <div className="flex items-center gap-4 text-sm text-gray-500">
                   <span>Qty: {item.quantity}</span>
-                  <span>Unit: {formatCurrency(item.unit_price)}</span>
-                  <span className="font-medium">Total: {formatCurrency(item.total_price)}</span>
+                  <span>Unit: {formatMoney(item?.unit_price)}</span>
+                  <span className="font-medium">Total: {formatMoney(item?.total_price)}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -228,7 +228,7 @@ export default function ReservationItemsList({ bookingId, items }: ReservationIt
           <div className="flex justify-between items-center">
             <span className="font-medium text-gray-900">Total Items Value:</span>
             <span className="text-lg font-bold text-gray-900">
-              {formatCurrency(items.reduce((sum, item) => sum + item.total_price, 0))}
+              {formatMoney(items.reduce((sum, item) => sum + (item?.total_price || 0), 0))}
             </span>
           </div>
         </div>

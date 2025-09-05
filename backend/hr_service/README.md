@@ -142,7 +142,7 @@ Key environment variables in `.env`:
 ```env
 DATABASE_URL=postgresql://postgres:password@localhost:5437/hr_db
 REDIS_URL=redis://localhost:6384/5
-AUTH_SERVICE_URL=http://localhost:8000
+AUTH_SERVICE_URL=http://auth_service:8000
 SECRET_KEY=your-super-secret-key
 PROBATION_PERIOD_MONTHS=6
 ANNUAL_LEAVE_DAYS=22
@@ -509,8 +509,8 @@ Key environment variables in `.env`:
 DATABASE_URL=postgresql://user:pass@localhost:5432/hr_db
 REDIS_URL=redis://localhost:6379/5
 SECRET_KEY=your-super-secret-key
-AUTH_SERVICE_URL=http://localhost:8000
-NOTIFICATION_SERVICE_URL=http://localhost:8007
+AUTH_SERVICE_URL=http://auth_service:8000
+NOTIFICATION_SERVICE_URL=http://notification_app:8007
 
 # Morocco-specific settings
 MIN_SALARY_MAD=2000

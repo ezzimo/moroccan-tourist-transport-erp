@@ -4,6 +4,10 @@ import { useCreateBooking } from '../hooks/useBookings';
 import { useCustomers } from '../../crm/hooks/useCustomers';
 import { usePricingCalculation } from '../hooks/usePricing';
 import { CreateBookingData } from '../types/booking';
+import { useDebounce } from '../../utils/debounce';
+import { safeNumber, isValidNumber, formatCurrencyInput, formatMoney } from '../../utils/number';
+import { useMemo, useCallback } from 'react';
+import ErrorBoundary from '../../components/ErrorBoundary';
 
 interface CreateBookingModalProps {
   isOpen: boolean;
@@ -25,14 +29,65 @@ export default function CreateBookingModal({ isOpen, onClose }: CreateBookingMod
     base_price: 0,
   });
 
-  const { data: pricingData } = usePricingCalculation({
+  // Keep base price as string for better input handling
+  const [basePriceInput, setBasePriceInput] = useState<string>('');
+  const [pricingEnabled, setPricingEnabled] = useState(false);
+
+  // Debounced pricing calculation trigger
+  const debouncedEnablePricing = useDebounce(() => {
+    const isFormValid = !!(
+      formData.service_type &&
+      formData.customer_id &&
+      formData.start_date &&
+      formData.pax_count > 0 &&
+      isValidNumber(basePriceInput) &&
+      safeNumber(basePriceInput) > 0
+    );
+    
+    if (isFormValid) {
+      // Update the numeric value in form data
+      setFormData(prev => ({ ...prev, base_price: safeNumber(basePriceInput) }));
+      setPricingEnabled(true);
+    } else {
+      setPricingEnabled(false);
+    }
+  }, 400);
+
+  // Handle base price input changes
+  const handleBasePriceChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = e.target.value;
+    const cleanedValue = formatCurrencyInput(rawValue);
+    
+    setBasePriceInput(cleanedValue);
+    debouncedEnablePricing();
+  }, [debouncedEnablePricing]);
+
+
+  // Only calculate pricing when all required fields are valid
+  const shouldCalculatePricing = useMemo(() => {
+    return !!(
+      formData.service_type &&
+      formData.base_price > 0 &&
+      formData.pax_count > 0 &&
+      formData.start_date &&
+      formData.customer_id
+    );
+  }, [formData.service_type, formData.base_price, formData.pax_count, formData.start_date, formData.customer_id]);
+
+  // Only calculate pricing when form is valid and enabled
+  const pricingRequest = useMemo(() => ({
     service_type: formData.service_type,
     base_price: formData.base_price,
     pax_count: formData.pax_count,
     start_date: formData.start_date,
     customer_id: formData.customer_id,
     promo_code: formData.promo_code,
-  }, formData.base_price > 0 && !!formData.start_date);
+  }), [formData]);
+
+  const { data: pricingData, error: pricingError, isLoading: pricingLoading } = usePricingCalculation(
+    pricingRequest,
+    pricingEnabled
+  );
 
   if (!isOpen) return null;
 
@@ -40,6 +95,7 @@ export default function CreateBookingModal({ isOpen, onClose }: CreateBookingMod
     e.preventDefault();
     try {
       await createBooking.mutateAsync(formData);
+      console.log('✅ Booking created successfully');
       onClose();
       setFormData({
         customer_id: '',
@@ -52,7 +108,37 @@ export default function CreateBookingModal({ isOpen, onClose }: CreateBookingMod
         base_price: 0,
       });
     } catch (error) {
-      console.error('Failed to create booking:', error);
+      console.error('❌ Failed to create booking:', error);
+      
+      // Handle typed errors from backend
+      const errorType = (error as any)?.type;
+      const errorMessage = (error as any)?.message || 'Failed to create booking';
+      
+      let userMessage = errorMessage;
+      
+      switch (errorType) {
+        case 'customer_not_found':
+          userMessage = 'Selected customer not found. Please refresh and try again.';
+          break;
+        case 'customer_forbidden':
+          userMessage = 'Not authorized to access customer information.';
+          break;
+        case 'customer_service_unreachable':
+          userMessage = 'Customer service temporarily unavailable. Please try again.';
+          break;
+        case 'validation_error':
+          userMessage = `Validation error: ${errorMessage}`;
+          break;
+        case 'booking_create_failed':
+          userMessage = 'Unable to create booking. Please try again.';
+          break;
+        default:
+          userMessage = errorMessage;
+      }
+      
+      // You could show this in a toast notification or error state
+      // For now, we'll log it and the error will be handled by the mutation error state
+      console.warn('User-friendly error message:', userMessage);
     }
   };
 
@@ -79,7 +165,16 @@ export default function CreateBookingModal({ isOpen, onClose }: CreateBookingMod
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <ErrorBoundary fallback={
+        <div className="bg-white rounded-lg max-w-md w-full p-6 text-center">
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Error Loading Form</h3>
+          <p className="text-gray-600 mb-4">There was an error loading the booking form.</p>
+          <button onClick={onClose} className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400">
+            Close
+          </button>
+        </div>
+      }>
+        <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b">
           <h2 className="text-xl font-semibold text-gray-900">Create Booking</h2>
           <button
@@ -225,13 +320,17 @@ export default function CreateBookingModal({ isOpen, onClose }: CreateBookingMod
               </label>
               <input
                 type="number"
-                value={formData.base_price}
-                onChange={(e) => setFormData(prev => ({ ...prev, base_price: parseFloat(e.target.value) || 0 }))}
+                value={basePriceInput}
+                onChange={handleBasePriceChange}
                 required
-                min="0"
-                step="0.01"
+                inputMode="decimal"
+                pattern="[0-9]*\.?[0-9]*"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                placeholder="0.00"
               />
+              {basePriceInput && !isValidNumber(basePriceInput) && (
+                <p className="text-red-500 text-sm mt-1">Please enter a valid price</p>
+              )}
             </div>
 
             <div>
@@ -248,25 +347,43 @@ export default function CreateBookingModal({ isOpen, onClose }: CreateBookingMod
             </div>
           </div>
 
-          {pricingData && (
+          {pricingLoading && (
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                <span className="text-sm text-gray-600">Calculating pricing...</span>
+              </div>
+            </div>
+          )}
+
+          {pricingData && !pricingLoading && (
             <div className="p-4 bg-blue-50 rounded-lg">
               <h4 className="font-medium text-blue-900 mb-2">Pricing Calculation</h4>
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between">
                   <span className="text-blue-700">Base Price:</span>
-                  <span className="font-medium">{pricingData.base_price.toFixed(2)} {pricingData.currency}</span>
+                  <span className="font-medium">{formatMoney(pricingData?.base_price, 2, pricingData?.currency || 'MAD')}</span>
                 </div>
-                {pricingData.discount_amount > 0 && (
+                {safeNumber(pricingData?.discount_amount) > 0 && (
                   <div className="flex justify-between">
                     <span className="text-blue-700">Discount:</span>
-                    <span className="font-medium text-green-600">-{pricingData.discount_amount.toFixed(2)} {pricingData.currency}</span>
+                    <span className="font-medium text-green-600">-{formatMoney(pricingData?.discount_amount, 2, pricingData?.currency || 'MAD')}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t border-blue-200 pt-1">
                   <span className="font-medium text-blue-900">Total:</span>
-                  <span className="font-bold text-blue-900">{pricingData.total_price.toFixed(2)} {pricingData.currency}</span>
+                  <span className="font-bold text-blue-900">{formatMoney(pricingData?.total_price, 2, pricingData?.currency || 'MAD')}</span>
                 </div>
               </div>
+            </div>
+          )}
+
+          {pricingError && (
+            <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+              <h4 className="font-medium text-red-900 mb-2">Pricing Error</h4>
+              <p className="text-sm text-red-700">
+                {pricingError?.message || 'Unable to calculate pricing. Please check your input values.'}
+              </p>
             </div>
           )}
 
@@ -301,6 +418,7 @@ export default function CreateBookingModal({ isOpen, onClose }: CreateBookingMod
           </div>
         </form>
       </div>
+      </ErrorBoundary>
     </div>
   );
 }

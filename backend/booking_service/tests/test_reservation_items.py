@@ -4,8 +4,7 @@ Tests for reservation item functionality
 import pytest
 from services.reservation_service import ReservationService
 from schemas.booking import ReservationItemCreate, ReservationItemUpdate
-from models.booking import ItemType
-from models.booking import BookingStatus
+from models.enums import ItemType, BookingStatus
 from decimal import Decimal
 
 
@@ -44,7 +43,7 @@ class TestReservationItems:
         
         # Verify booking total was updated
         from sqlmodel import select
-        from models.booking import Booking
+        from models import Booking
         
         updated_booking = session.exec(
             select(Booking).where(Booking.id == test_booking.id)
@@ -169,7 +168,7 @@ class TestReservationItems:
         
         # Verify booking total was updated
         from sqlmodel import select
-        from models.booking import Booking
+        from models import Booking
         
         updated_booking = session.exec(
             select(Booking).where(Booking.id == test_booking.id)
@@ -216,7 +215,7 @@ class TestReservationItems:
         
         # Verify booking total was updated (cancelled item cost removed)
         from sqlmodel import select
-        from models.booking import Booking
+        from models import Booking
         
         updated_booking = session.exec(
             select(Booking).where(Booking.id == test_booking.id)

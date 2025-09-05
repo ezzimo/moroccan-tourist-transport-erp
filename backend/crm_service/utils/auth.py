@@ -8,6 +8,9 @@ from config import settings
 from typing import Optional, Dict, Any
 import httpx
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 security = HTTPBearer()
@@ -32,28 +35,73 @@ async def verify_auth_token(token: str) -> Optional[Dict[str, Any]]:
     """Verify token with auth service"""
     try:
         # First try local JWT verification for performance
-        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-        print(f"Local JWT verification successful: {payload.get('email', 'unknown')}")
+        # Handle audience verification based on configuration
+        decode_options = {"verify_aud": not settings.jwt_disable_audience_check}
+        
+        if settings.jwt_disable_audience_check:
+            payload = jwt.decode(
+                token, 
+                settings.secret_key, 
+                algorithms=[settings.algorithm],
+                options=decode_options
+            )
+            logger.debug(f"JWT decoded without audience check for user: {payload.get('email', 'unknown')}")
+            return payload
+        else:
+            # Try each allowed audience
+            last_error = None
+            for audience in settings.jwt_allowed_audiences:
+                try:
+                    payload = jwt.decode(
+                        token,
+                        settings.secret_key,
+                        algorithms=[settings.algorithm],
+                        audience=audience,
+                        issuer=settings.jwt_issuer
+                    )
+                    logger.debug(f"JWT verified with audience '{audience}' for user: {payload.get('email', 'unknown')}")
+                    break
+                except jwt.JWTClaimsError as e:
+                    last_error = e
+                    continue
+                except jwt.JWTError as e:
+                    last_error = e
+                    break
+            else:
+                # No audience worked, raise the last error
+                if last_error:
+                    logger.warning(f"JWT verification failed for all audiences {settings.jwt_allowed_audiences}: {last_error}")
+                    raise last_error
+        
         return payload
     except JWTError as e:
-        print(f"Local JWT verification failed: {e}")
+        logger.warning(f"Local JWT verification failed: {e}")
         # If local verification fails, check with auth service
-        try:
-            print(f"Calling auth service at: {settings.auth_service_url}/api/v1/auth/me")
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    f"{settings.auth_service_url}/api/v1/auth/me",
-                    headers={"Authorization": f"Bearer {token}"}
-                )
-                print(f"Auth service response status: {response.status_code}")
-                if response.status_code == 200:
-                    user_data = response.json()
-                    print(f"Auth service returned user: {user_data.get('email', 'unknown')}")
-                    return user_data
-                else:
-                    print(f"Auth service error: {response.text}")
-        except Exception as e:
-            print(f"Error calling auth service: {e}")
+        return await _verify_with_auth_service(token)
+    except Exception as e:
+        logger.error(f"Unexpected JWT verification error: {e}")
+    return None
+
+
+async def _verify_with_auth_service(token: str) -> Optional[Dict[str, Any]]:
+    """Fallback verification with remote auth service"""
+    try:
+        logger.debug(f"Trying remote auth service: {settings.auth_service_url}")
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.auth_service_url}/api/v1/auth/me",
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=5.0
+            )
+            if response.status_code == 200:
+                user_data = response.json()
+                logger.debug(f"Remote auth verification successful: {user_data.get('email', 'unknown')}")
+                return user_data
+            else:
+                logger.warning(f"Remote auth service returned {response.status_code}: {response.text[:200]}")
+    except Exception as e:
+        logger.error(f"Remote auth service error: {e}")
+    
     return None
 
 
@@ -99,14 +147,11 @@ async def get_current_user(
                         permissions=permissions_data["permissions"]
                     )
     except KeyError as e:
-        print(f"Missing field in user data: {e}")
-        print(f"User data received: {user_data}")
+        logger.error(f"Missing field in user data: {e}, data keys: {list(user_data.keys()) if user_data else 'None'}")
     except ValueError as e:
-        print(f"Invalid UUID format: {e}")
-        print(f"User data received: {user_data}")
+        logger.error(f"Invalid UUID format: {e}, user_id: {user_data.get('id') or user_data.get('sub', 'missing')}")
     except Exception as e:
-        print(f"Unexpected error in authentication: {e}")
-        print(f"User data received: {user_data}")
+        logger.error(f"Unexpected error in authentication: {e}")
     
     raise credentials_exception
 

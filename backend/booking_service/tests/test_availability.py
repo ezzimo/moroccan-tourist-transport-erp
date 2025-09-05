@@ -4,7 +4,7 @@ Tests for availability functionality
 import pytest
 from services.availability_service import AvailabilityService
 from schemas.booking import AvailabilityRequest
-from models.booking import ResourceType
+from models.enums import ResourceType
 from datetime import date, timedelta
 import uuid
 

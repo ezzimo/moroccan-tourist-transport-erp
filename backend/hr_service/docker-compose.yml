@@ -13,7 +13,7 @@ services:
       - BOOKING_SERVICE_URL=http://booking_app:8002
       - TOUR_SERVICE_URL=http://tour_app:8003
       - FLEET_SERVICE_URL=http://fleet_app:8004
-      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - SECRET_KEY=super-secret-key-change-this
       - ENVIRONMENT=development
     depends_on:
       - hr_db

@@ -7,6 +7,11 @@ import {
 
 export const pricingApi = {
   calculatePricing: async (data: PricingRequest): Promise<PricingCalculation> => {
+    // Validate required fields before making API call
+    if (!data.service_type || !data.base_price || data.base_price <= 0 || !data.pax_count || !data.start_date) {
+      throw new Error('Missing required fields for pricing calculation');
+    }
+
     const response = await apiClient.post('/pricing/calculate', data);
     return response.data;
   },

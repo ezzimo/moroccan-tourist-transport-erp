@@ -4,7 +4,7 @@ Tests for booking functionality
 import pytest
 from services.booking_service import BookingService
 from schemas.booking import BookingCreate
-from models.booking import BookingStatus, ServiceType
+from models.enums import BookingStatus, ServiceType
 from decimal import Decimal
 import uuid
 

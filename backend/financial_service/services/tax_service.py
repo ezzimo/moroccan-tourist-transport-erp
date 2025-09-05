@@ -64,7 +64,7 @@ class TaxService:
             and_(
                 Expense.expense_date >= start_date,
                 Expense.expense_date <= end_date,
-                Expense.status.in_([ExpenseStatus.APPROVED, ExpenseStatus.PAID])
+                Expense.status.in_([ExpenseStatus.APPROVED.value, ExpenseStatus.PAID.value])
             )
         )
         expenses = self.session.exec(expense_query).all()
@@ -136,7 +136,7 @@ class TaxService:
             and_(
                 Expense.expense_date >= start_date,
                 Expense.expense_date <= end_date,
-                Expense.status == ExpenseStatus.PAID
+                Expense.status == ExpenseStatus.PAID.value
             )
         )
         expenses = self.session.exec(expense_query).all()

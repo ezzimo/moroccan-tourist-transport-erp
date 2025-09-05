@@ -2,9 +2,14 @@
 Booking service for booking management operations
 """
 
-from sqlmodel import Session, select, and_, or_
+from sqlmodel import Session, select, and_, or_, func
 from fastapi import HTTPException, status
-from models.booking import Booking, BookingStatus, PaymentStatus, ReservationItem
+from models import (
+    Booking,
+    BookingStatus,
+    PaymentStatus,
+    ReservationItem,
+)
 from schemas.booking import (
     BookingCreate,
     BookingUpdate,
@@ -14,29 +19,40 @@ from schemas.booking import (
     BookingCancel,
     BookingSearch,
 )
+from schemas.booking_filters import BookingFilters
 from utils.pagination import PaginationParams, paginate_query
 from utils.locking import acquire_booking_lock, release_booking_lock
 from services.pricing_service import PricingService
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime, timedelta
-from decimal import Decimal
+from math import ceil
 import redis
 import uuid
 import httpx
+import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class BookingService:
     """Service for handling booking operations"""
 
-    def __init__(self, session: Session, redis_client: redis.Redis):
+    def __init__(self, session: Session, redis_client=None):
         self.session = session
-        self.redis = redis_client
+        self.redis = redis_client  # Optional for backward compatibility
         self.pricing_service = PricingService(session)
 
     async def create_booking(
-        self, booking_data: BookingCreate, current_user_id: uuid.UUID
+        self,
+        booking_data: BookingCreate,
+        current_user_id: uuid.UUID,
+        customer_verified: bool = False,
+        customer_snapshot: Optional[Dict[str, Any]] = None,
     ) -> BookingResponse:
         """Create a new booking with locking mechanism"""
+        logger.info("Creating booking with verification status: %s", customer_verified)
+        
         # Acquire lock for booking creation
         lock_key = (
             f"booking_create:{booking_data.customer_id}:{booking_data.start_date}"
@@ -53,25 +69,45 @@ class BookingService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Another booking is being processed. Please try again.",
             )
+        
 
         try:
-            # Verify customer exists (call CRM service)
-            await self._verify_customer_exists(booking_data.customer_id)
-
             # Calculate pricing
-            pricing_request = {
-                "service_type": booking_data.service_type.value,
-                "base_price": booking_data.base_price,
-                "pax_count": booking_data.pax_count,
-                "start_date": booking_data.start_date,
-                "end_date": booking_data.end_date,
-                "customer_id": booking_data.customer_id,
-                "promo_code": booking_data.promo_code,
-            }
+            from schemas.pricing import PricingRequest
+            pricing_request = PricingRequest(
+                service_type=booking_data.service_type.value,
+                base_price=booking_data.base_price,
+                pax_count=booking_data.pax_count,
+                start_date=booking_data.start_date,
+                end_date=booking_data.end_date,
+                customer_id=booking_data.customer_id,
+                promo_code=booking_data.promo_code,
+            )
 
             pricing_result = await self.pricing_service.calculate_pricing(
                 pricing_request
             )
+
+            # Prepare booking data
+            booking_dict = booking_data.model_dump()
+            
+            # Add verification metadata to internal notes
+            notes = booking_dict.get("internal_notes", "") or ""
+            verification_info = []
+            
+            if not customer_verified:
+                verification_info.append("[customer_unverified]")
+            else:
+                verification_info.append("[customer_verified]")
+                if customer_snapshot:
+                    customer_name = customer_snapshot.get("full_name") or customer_snapshot.get("company_name")
+                    if customer_name:
+                        verification_info.append(f"customer_name:{customer_name}")
+            
+            if verification_info:
+                notes = f"{' '.join(verification_info)} {notes}".strip()
+                booking_dict["internal_notes"] = notes
+            
 
             # Create booking
             booking = Booking(
@@ -83,11 +119,12 @@ class BookingService:
                 lead_passenger_phone=booking_data.lead_passenger_phone,
                 start_date=booking_data.start_date,
                 end_date=booking_data.end_date,
-                base_price=pricing_result["base_price"],
-                discount_amount=pricing_result["discount_amount"],
-                total_price=pricing_result["total_price"],
+                base_price=pricing_result.base_price,
+                discount_amount=pricing_result.discount_amount,
+                total_price=pricing_result.total_price,
                 payment_method=booking_data.payment_method,
                 special_requests=booking_data.special_requests,
+                internal_notes=booking_dict.get("internal_notes"),
                 expires_at=datetime.utcnow() + timedelta(minutes=30),  # 30 min expiry
             )
 
@@ -98,6 +135,7 @@ class BookingService:
             # Schedule expiry check
             await self._schedule_booking_expiry(booking.id)
 
+            logger.info("Booking created: %s (verified: %s)", booking.id, customer_verified)
             return BookingResponse(**booking.model_dump())
 
         finally:
@@ -122,55 +160,106 @@ class BookingService:
 
         return BookingResponse(**booking.model_dump())
 
-    async def get_bookings(
-        self, pagination: PaginationParams, search: Optional[BookingSearch] = None
-    ) -> Tuple[List[BookingResponse], int]:
-        """Get list of bookings with optional search"""
+    async def get_bookings(self, filters: BookingFilters):
+        """Get paginated list of bookings with filters"""
+        # Build base query
         query = select(Booking)
-
-        # Apply search filters
-        if search:
-            conditions = []
-
-            if search.customer_id:
-                conditions.append(Booking.customer_id == search.customer_id)
-
-            if search.status:
-                conditions.append(Booking.status == search.status)
-
-            if search.service_type:
-                conditions.append(Booking.service_type == search.service_type)
-
-            if search.payment_status:
-                conditions.append(Booking.payment_status == search.payment_status)
-
-            if search.start_date_from:
-                conditions.append(Booking.start_date >= search.start_date_from)
-
-            if search.start_date_to:
-                conditions.append(Booking.start_date <= search.start_date_to)
-
-            if search.lead_passenger_name:
-                conditions.append(
-                    Booking.lead_passenger_name.ilike(f"%{search.lead_passenger_name}%")
+        count_query = select(func.count(Booking.id))
+        
+        # Apply filters based on actual Booking model fields
+        conditions = []
+        
+        if filters.customer_id is not None:
+            conditions.append(Booking.customer_id == filters.customer_id)
+        
+        if filters.service_type is not None:
+            conditions.append(Booking.service_type == filters.service_type)
+        
+        if filters.status is not None:
+            conditions.append(Booking.status == filters.status)
+        
+        if filters.payment_status is not None:
+            conditions.append(Booking.payment_status == filters.payment_status)
+        
+        if filters.start_date_from is not None:
+            from datetime import datetime
+            start_date = datetime.strptime(filters.start_date_from, "%Y-%m-%d").date()
+            conditions.append(Booking.start_date >= start_date)
+        
+        if filters.start_date_to is not None:
+            from datetime import datetime
+            end_date = datetime.strptime(filters.start_date_to, "%Y-%m-%d").date()
+            conditions.append(Booking.start_date <= end_date)
+        
+        if filters.created_from is not None:
+            conditions.append(Booking.created_at >= filters.created_from)
+        
+        if filters.created_to is not None:
+            conditions.append(Booking.created_at <= filters.created_to)
+        
+        if filters.pax_count_min is not None:
+            conditions.append(Booking.pax_count >= filters.pax_count_min)
+        
+        if filters.pax_count_max is not None:
+            conditions.append(Booking.pax_count <= filters.pax_count_max)
+        
+        if filters.currency is not None:
+            conditions.append(Booking.currency == filters.currency)
+        
+        if filters.search:
+            # Search in lead passenger name and email (actual model fields)
+            search_term = f"%{filters.search}%"
+            conditions.append(
+                or_(
+                    func.lower(Booking.lead_passenger_name).like(search_term.lower()),
+                    func.lower(Booking.lead_passenger_email).like(search_term.lower())
                 )
-
-            if search.lead_passenger_email:
-                conditions.append(
-                    Booking.lead_passenger_email.ilike(
-                        f"%{search.lead_passenger_email}%"
-                    )
-                )
-
-            if conditions:
-                query = query.where(and_(*conditions))
-
-        # Order by creation date (newest first)
-        query = query.order_by(Booking.created_at.desc())
-
-        bookings, total = paginate_query(self.session, query, pagination)
-
-        return [BookingResponse(**booking.model_dump()) for booking in bookings], total
+            )
+        
+        # Apply all conditions
+        if conditions:
+            from sqlmodel import and_
+            query = query.where(and_(*conditions))
+            count_query = count_query.where(and_(*conditions))
+        
+        # Apply sorting
+        if filters.sort_by:
+            # Safe list of sortable columns
+            sortable_columns = {
+                'created_at': Booking.created_at,
+                'start_date': Booking.start_date,
+                'total_price': Booking.total_price,
+                'lead_passenger_name': Booking.lead_passenger_name,
+                'status': Booking.status,
+                'pax_count': Booking.pax_count
+            }
+            
+            if filters.sort_by in sortable_columns:
+                col = sortable_columns[filters.sort_by]
+                if filters.sort_order == "desc":
+                    query = query.order_by(col.desc())
+                else:
+                    query = query.order_by(col.asc())
+            else:
+                # Default sort if invalid sort_by
+                query = query.order_by(Booking.created_at.desc())
+        else:
+            # Default sort by creation date
+            query = query.order_by(Booking.created_at.desc())
+        
+        # Get total count
+        total = self.session.exec(count_query).one()
+        
+        # Apply pagination
+        items = self.session.exec(query.offset(filters.offset).limit(filters.size)).all()
+        
+        return {
+            "items": items,
+            "page": filters.page,
+            "size": filters.size,
+            "total": total,
+            "pages": ceil(total / filters.size) if filters.size else 1
+        }
 
     async def update_booking(
         self, booking_id: uuid.UUID, booking_data: BookingUpdate
@@ -335,17 +424,47 @@ class BookingService:
 
         return False
 
+    async def generate_voucher_pdf(self, booking_id: uuid.UUID) -> bytes:
+        """Generate booking voucher PDF"""
+        from config import settings
+        from utils import pdf_generator
+        
+        if not settings.pdf_enabled or not pdf_generator.have_reportlab():
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="PDF generation is not available"
+            )
+        
+        booking = await self.get_booking(booking_id)
+        if not booking:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Booking not found"
+            )
+        
+        # Convert booking to dict for PDF generation
+        booking_dict = booking.model_dump() if hasattr(booking, 'model_dump') else booking.__dict__
+        
+        return pdf_generator.generate_booking_confirmation(booking_dict)
+    
     async def _verify_customer_exists(self, customer_id: uuid.UUID) -> bool:
         """Verify customer exists in CRM service"""
+        logger.debug("DIAGNOSTIC: _verify_customer_exists called for customer_id: %s", customer_id)
         try:
             from config import settings
 
+            logger.debug("DIAGNOSTIC: Making HTTP request to CRM service: %s", settings.crm_service_url)
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     f"{settings.crm_service_url}/api/v1/customers/{customer_id}"
                 )
+                logger.debug("DIAGNOSTIC: CRM response status: %s", response.status_code)
+                if response.status_code != 200:
+                    logger.debug("DIAGNOSTIC: CRM response body: %s", response.text[:200])
                 return response.status_code == 200
-        except:
+        except Exception as e:
+            logger.error("DIAGNOSTIC: Exception in _verify_customer_exists: %s", str(e))
+            logger.error("DIAGNOSTIC: Exception type: %s", type(e).__name__)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Unable to verify customer information",
@@ -368,7 +487,25 @@ class BookingService:
 
     async def _schedule_booking_expiry(self, booking_id: uuid.UUID):
         """Schedule booking expiry check"""
+        logger.debug("DIAGNOSTIC: _schedule_booking_expiry called for booking_id: %s", booking_id)
         # In a production environment, you would use Celery or similar
         # For now, we'll store the expiry in Redis
-        expiry_key = f"booking_expiry:{booking_id}"
-        self.redis.setex(expiry_key, 1800, str(booking_id))  # 30 minutes
+        try:
+            expiry_key = f"booking_expiry:{booking_id}"
+            logger.debug("DIAGNOSTIC: Setting Redis expiry key: %s", expiry_key)
+            
+            # Check if redis client is async or sync
+            if hasattr(self.redis, 'setex'):
+                # Sync Redis client
+                self.redis.setex(expiry_key, 1800, str(booking_id))  # 30 minutes
+                logger.debug("DIAGNOSTIC: Redis expiry set using sync client")
+            else:
+                # Async Redis client - this would need await
+                logger.warning("DIAGNOSTIC: Async Redis client detected but method not awaited")
+                # For now, skip to avoid blocking
+                pass
+        except Exception as e:
+            logger.error("DIAGNOSTIC: Exception in _schedule_booking_expiry: %s", str(e))
+            logger.error("DIAGNOSTIC: Exception type: %s", type(e).__name__)
+            # Don't fail booking creation for expiry scheduling issues
+            pass

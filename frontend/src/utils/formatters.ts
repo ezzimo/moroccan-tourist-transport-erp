@@ -1,3 +1,5 @@
+import { formatMoney as formatMoneyUtil } from './number';
+
 export const formatDate = (date: string | Date) => {
   return new Date(date).toLocaleDateString('en-US', {
     year: 'numeric',
@@ -27,11 +29,8 @@ export const formatPhoneNumber = (phone: string) => {
 };
 
 export const formatCurrency = (amount: number, currency = 'MAD') => {
-  return new Intl.NumberFormat('fr-MA', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-  }).format(amount);
+  // Use safe number formatting utility
+  return formatMoneyUtil(amount, 2, currency);
 };
 
 export const truncateText = (text: string, maxLength: number) => {

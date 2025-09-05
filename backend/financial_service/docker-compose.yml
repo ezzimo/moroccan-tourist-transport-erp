@@ -14,7 +14,7 @@ services:
       - TOUR_SERVICE_URL=http://tour_app:8003
       - FLEET_SERVICE_URL=http://fleet_app:8004
       - HR_SERVICE_URL=http://hr_app:8005
-      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - SECRET_KEY=super-secret-key-change-this
       - ENVIRONMENT=development
     depends_on:
       - financial_db

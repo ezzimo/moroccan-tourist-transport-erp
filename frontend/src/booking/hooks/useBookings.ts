@@ -22,8 +22,16 @@ export function useCreateBooking() {
 
   return useMutation({
     mutationFn: (data: CreateBookingData) => bookingApi.createBooking(data),
+    retry: false, // Prevent cascading retries on validation errors
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
+    },
+    onError: (error: any) => {
+      console.error('Booking creation error:', {
+        type: error.type,
+        message: error.message,
+        status: error.status
+      });
     },
   });
 }

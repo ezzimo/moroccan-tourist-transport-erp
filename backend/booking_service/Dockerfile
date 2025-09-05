@@ -2,9 +2,12 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies including runtime libs for ReportLab
 RUN apt-get update && apt-get install -y \
     gcc \
+    libfreetype6 \
+    libjpeg62-turbo \
+    libpng16-16 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching

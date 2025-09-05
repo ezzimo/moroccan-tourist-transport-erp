@@ -113,6 +113,6 @@ if __name__ == "__main__":
     uvicorn.run(
         "driver_service.main:app",
         host="0.0.0.0",
-        port=8010,
+        port=8003,
         reload=settings.debug
     )
