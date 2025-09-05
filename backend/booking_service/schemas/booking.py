@@ -1,12 +1,21 @@
 """
-Booking-related Pydantic schemas
+Booking-related Pydantic schemas for the Booking Service.
+
+Defines the data transfer objects (DTOs) for creating, reading,
+and confirming bookings, ensuring type safety and validation.
 """
 
-from pydantic import BaseModel, EmailStr, field_validator
-from typing import Optional, List, Dict, Any
+from __future__ import annotations
+
 from datetime import datetime, date
 from decimal import Decimal
-from models.enums import (
+from typing import Optional, Dict, Any, List
+from uuid import UUID
+
+from pydantic import BaseModel, EmailStr, field_validator, model_validator
+from sqlmodel import SQLModel, Field
+
+from backend.booking_service.models.enums import (
     BookingStatus,
     ServiceType,
     PaymentStatus,
@@ -14,45 +23,150 @@ from models.enums import (
     ResourceType,
     DiscountType,
 )
-import uuid
 
 
-class BookingBase(BaseModel):
-    customer_id: uuid.UUID
+# Phase 1 Schemas (BK-006)
+
+class BookingCreate(SQLModel):
+    """
+    Create request for a booking.
+
+    `customer_id` is validated against the Customer Relationship Management (CRM)
+    service in the service layer. This linkage is handled by `clients/customer_client.py`.
+    """
+    # Core booking details
+    customer_id: UUID
     service_type: ServiceType
-    pax_count: int
-    lead_passenger_name: str
-    lead_passenger_email: EmailStr
-    lead_passenger_phone: str
-    start_date: date
-    end_date: Optional[date] = None
-    special_requests: Optional[str] = None
+    booking_source: str = "web"
 
+    # Trip details
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    pax_count: Optional[int] = Field(default=None, ge=1, le=50)
+    vehicle_type_requested: Optional[str] = Field(default=None, max_length=100)
 
-class BookingCreate(BookingBase):
-    base_price: Decimal
-    promo_code: Optional[str] = None
-    payment_method: Optional[str] = None
+    # Location details
+    pickup_location_text: Optional[str] = Field(default=None, max_length=500)
+    pickup_location_coords: Optional[Dict[str, Any]] = None
+    dropoff_location_text: Optional[str] = Field(default=None, max_length=500)
+    dropoff_location_coords: Optional[Dict[str, Any]] = None
 
-    @field_validator("end_date")
+    # Passenger details
+    lead_passenger_name: Optional[str] = None
+    lead_passenger_email: Optional[EmailStr] = None
+    lead_passenger_phone: Optional[str] = None
+
+    # Operational details
+    agent_id: Optional[UUID] = None
+    price_snapshot: Optional[Dict[str, Any]] = None
+    payment_provider: Optional[str] = Field(default=None, max_length=50)
+
+    @field_validator("pickup_location_coords", "dropoff_location_coords")
     @classmethod
-    def validate_end_date(cls, v, values):
-        start_date = (
-            values.data.get("start_date")
-            if hasattr(values, "data")
-            else values.get("start_date")
-        )
-        if v and start_date and v < start_date:
-            raise ValueError("End date must be after start date")
+    def _check_coords(cls, v: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """Validate that coordinate dictionaries contain valid lat/lng values."""
+        if v is None:
+            return v
+        lat = v.get("lat")
+        lng = v.get("lng")
+        if not isinstance(lat, (int, float)) or not isinstance(lng, (int, float)):
+            raise ValueError("Coordinates require numeric 'lat' and 'lng' values.")
+        if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+            raise ValueError("Coordinate values are out of valid geographical range.")
         return v
 
-    @field_validator("pax_count")
-    @classmethod
-    def validate_pax_count(cls, v):
-        if v < 1 or v > 50:
-            raise ValueError("Passenger count must be between 1 and 50")
-        return v
+    @model_validator(mode="after")
+    def _check_times(self) -> "BookingCreate":
+        """Ensure that if both start and end times are provided, start_time precedes end_time."""
+        if self.start_time and self.end_time and self.start_time >= self.end_time:
+            raise ValueError("start_time must be earlier than end_time.")
+        return self
 
+
+class BookingResponse(SQLModel):
+    """
+    Standard response model for a booking, returning all core fields.
+    """
+    id: UUID
+    status: BookingStatus
+    customer_id: UUID
+    service_type: ServiceType
+
+    # Trip details
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    pax_count: Optional[int] = None
+    vehicle_type_requested: Optional[str] = None
+    vehicle_id: Optional[UUID] = None
+    driver_id: Optional[UUID] = None
+
+    # Location details
+    pickup_location_text: Optional[str] = None
+    pickup_location_coords: Optional[Dict[str, Any]] = None
+    dropoff_location_text: Optional[str] = None
+    dropoff_location_coords: Optional[Dict[str, Any]] = None
+
+    # Estimates
+    estimated_duration_minutes: Optional[int] = None
+    estimated_distance_km: Optional[float] = None
+
+    # Passenger details
+    lead_passenger_name: Optional[str] = None
+    lead_passenger_email: Optional[EmailStr] = None
+    lead_passenger_phone: Optional[str] = None
+
+    # Pricing and Payment
+    base_price: Optional[Decimal] = None
+    discount_amount: Decimal
+    total_price: Optional[Decimal] = None
+    currency: str
+    price_snapshot: Optional[Dict[str, Any]] = None
+    payment_status: PaymentStatus
+    payment_provider: Optional[str] = None
+    payment_reference: Optional[str] = None
+
+    # Operational details
+    booking_source: str
+    agent_id: Optional[UUID] = None
+    internal_notes: Optional[str] = None
+
+    # Timestamps & Status
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    confirmed_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
+    cancellation_reason: Optional[str] = None
+    cancelled_at: Optional[datetime] = None
+    cancelled_by: Optional[UUID] = None
+
+
+class BookingConfirmPayload(SQLModel):
+    """
+    Payload required to confirm a pending booking.
+    Typically used after a successful payment or manual verification.
+    """
+    payment_reference: str
+    vehicle_id: UUID
+    driver_id: UUID
+    internal_notes: Optional[str] = None
+    payment_amount: Optional[Decimal] = None  # Optional, for cross-checking payment
+
+
+class BookingConfirmationResponse(SQLModel):
+    """
+    Response sent after a booking is successfully confirmed.
+    """
+    booking_id: UUID
+    status: BookingStatus
+    confirmed_at: datetime
+    vehicle_id: UUID
+    driver_id: UUID
+    payment_status: PaymentStatus
+    notification_status: str  # e.g., "SENT", "FAILED", "PENDING"
+
+
+# --- Legacy / Other Schemas ---
+# Note: These may need updates in subsequent tickets.
 
 class BookingUpdate(BaseModel):
     pax_count: Optional[int] = None
@@ -67,55 +181,8 @@ class BookingUpdate(BaseModel):
     payment_reference: Optional[str] = None
 
 
-class BookingResponse(BookingBase):
-    id: uuid.UUID
-    status: BookingStatus
-    base_price: Decimal
-    discount_amount: Decimal
-    total_price: Decimal
-    currency: str
-    payment_status: PaymentStatus
-    payment_method: Optional[str]
-    payment_reference: Optional[str]
-    internal_notes: Optional[str]
-    cancellation_reason: Optional[str]
-    cancelled_by: Optional[uuid.UUID]
-    cancelled_at: Optional[datetime]
-    created_at: datetime
-    updated_at: Optional[datetime]
-    confirmed_at: Optional[datetime]
-    expires_at: Optional[datetime]
-
-
-class BookingSummary(BookingResponse):
-    """Extended booking response with summary information"""
-
-    reservation_items_count: int = 0
-    duration_days: int = 1
-    is_expired: bool = False
-    can_be_cancelled: bool = True
-    customer_name: Optional[str] = None
-    customer_email: Optional[str] = None
-
-
-class BookingConfirm(BaseModel):
-    """Schema for booking confirmation"""
-
-    payment_reference: Optional[str] = None
-    internal_notes: Optional[str] = None
-
-
-class BookingCancel(BaseModel):
-    """Schema for booking cancellation"""
-
-    reason: str
-    refund_amount: Optional[Decimal] = None
-    internal_notes: Optional[str] = None
-
-
 class BookingSearch(BaseModel):
     """Schema for booking search criteria"""
-
     customer_id: Optional[uuid.UUID] = None
     status: Optional[BookingStatus] = None
     service_type: Optional[ServiceType] = None
