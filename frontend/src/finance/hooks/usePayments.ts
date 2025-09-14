@@ -22,6 +22,7 @@ export function useCreatePayment() {
 
   return useMutation({
     mutationFn: (data: CreatePaymentData) => paymentApi.createPayment(data),
+    retry: false,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
@@ -34,6 +35,7 @@ export function useConfirmPayment() {
 
   return useMutation({
     mutationFn: (id: string) => paymentApi.confirmPayment(id),
+    retry: false,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
@@ -46,6 +48,7 @@ export function useReconcilePayments() {
 
   return useMutation({
     mutationFn: (data: ReconcilePaymentsData) => paymentApi.reconcilePayments(data),
+    retry: false,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
     },

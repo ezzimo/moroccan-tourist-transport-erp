@@ -24,6 +24,9 @@ services:
     - 8000:8000
     env_file:
     - ./backend/app/.env
+    environment:
+      - JWT_AUDIENCE=mtterp
+      - JWT_ISSUER=auth-service
     depends_on:
       db_auth:
         condition: service_healthy
@@ -81,8 +84,28 @@ services:
     - 8002:8002
     env_file:
     - ./backend/booking_service/.env
+    environment:
+      - DATABASE_URL=postgresql://postgres:booking_pass@db_booking:5432/booking_db
+      - REDIS_URL=redis://redis_auth:6379/2
+      - AUTH_SERVICE_URL=http://auth_service:8000
+      - CUSTOMER_SERVICE_BASE=http://crm_service:8001/api/v1
+      - CUSTOMER_VERIFY_STRICT=false
+      - CUSTOMER_HTTP_TIMEOUT=2.0
+      - JWT_SECRET_KEY=super-secret-key-change-this
+      - JWT_ALGORITHM=HS256
+      - JWT_AUDIENCE=mtterp
+      - JWT_ISSUER=auth-service
+      - JWT_ALLOWED_AUDIENCES=["mtterp","booking_service"]
+      - JWT_DISABLE_AUDIENCE_CHECK=false
+      - BOOKING_PDF_ENABLED=true
     depends_on:
     - db_booking
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
     networks:
     - erp_net
   db_driver:
@@ -98,6 +121,11 @@ services:
     - db_driver:/var/lib/postgresql/data
     networks:
     - erp_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
   driver_service:
     build: ./backend/driver_service
     container_name: driver_service
@@ -106,9 +134,16 @@ services:
     env_file:
     - ./backend/driver_service/.env
     depends_on:
-    - db_driver
+      db_driver:
+        condition: service_healthy
     networks:
     - erp_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
   db_fleet:
     image: postgres:15
     container_name: db_fleet
@@ -146,15 +181,21 @@ services:
     - db_financial:/var/lib/postgresql/data
     networks:
     - erp_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
   financial_service:
     build: ./backend/financial_service
     container_name: financial_service
     ports:
-    - 8005:8005
+    - 8006:8006
     env_file:
     - ./backend/financial_service/.env
     depends_on:
-    - db_financial
+      db_financial:
+        condition: service_healthy
     networks:
     - erp_net
   db_hr:
@@ -174,7 +215,7 @@ services:
     build: ./backend/hr_service
     container_name: hr_service
     ports:
-    - 8006:8006
+    - 8005:8005
     env_file:
     - ./backend/hr_service/.env
     depends_on:
@@ -198,7 +239,7 @@ services:
     build: ./backend/inventory_service
     container_name: inventory_service
     ports:
-    - 8007:8007
+    - 8008:8008
     env_file:
     - ./backend/inventory_service/.env
     depends_on:
@@ -222,7 +263,7 @@ services:
     build: ./backend/notification_service
     container_name: notification_service
     ports:
-    - 8008:8008
+    - 8007:8007
     env_file:
     - ./backend/notification_service/.env
     depends_on:

@@ -16,7 +16,7 @@ services:
       - HR_SERVICE_URL=http://hr_app:8005
       - FINANCIAL_SERVICE_URL=http://financial_app:8006
       - NOTIFICATION_SERVICE_URL=http://notification_app:8007
-      - SECRET_KEY=your-super-secret-jwt-key-change-in-production
+      - SECRET_KEY=super-secret-key-change-this
       - ENVIRONMENT=development
     depends_on:
       - qa_db

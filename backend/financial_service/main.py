@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 from config import settings
-from database import create_db_and_tables
+# from database import create_db_and_tables
 from routers import (
     invoices_router, payments_router, expenses_router, tax_reports_router, analytics_router
 )
@@ -60,12 +60,13 @@ async def internal_server_error_handler(request: Request, exc: Exception):
 
 
 # Startup event
+"""
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database and create tables"""
+    "Initialize database and create tables"
     create_db_and_tables()
     logger.info("Financial database initialized successfully")
-
+"""
 
 # Health check
 @app.get("/health")

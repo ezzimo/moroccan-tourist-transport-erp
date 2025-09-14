@@ -129,7 +129,7 @@ Key environment variables in `.env`:
 ```env
 DATABASE_URL=postgresql://postgres:password@localhost:5439/notification_db
 REDIS_URL=redis://localhost:6386/7
-AUTH_SERVICE_URL=http://localhost:8000
+AUTH_SERVICE_URL=http://auth_service:8000
 
 # Email Configuration
 SMTP_HOST=smtp.gmail.com

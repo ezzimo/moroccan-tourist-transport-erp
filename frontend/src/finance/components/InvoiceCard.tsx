@@ -2,7 +2,8 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { FileText, DollarSign, Calendar, AlertTriangle } from 'lucide-react';
 import { Invoice } from '../types/invoice';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatDate } from '../../utils/formatters';
+import { formatMoney } from '../../utils/number';
 
 interface InvoiceCardProps {
   invoice: Invoice;
@@ -61,7 +62,7 @@ export default function InvoiceCard({ invoice }: InvoiceCardProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <DollarSign className="h-4 w-4" />
-          <span>{formatCurrency(invoice.total_amount, invoice.currency)}</span>
+          <span>{formatMoney(invoice?.total_amount, 2, invoice?.currency)}</span>
         </div>
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <Calendar className="h-4 w-4" />

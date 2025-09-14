@@ -2,7 +2,8 @@ import React from 'react';
 import { Receipt, Calendar, CheckCircle, Clock, X, AlertTriangle } from 'lucide-react';
 import { Expense } from '../types/expense';
 import { useApproveExpense } from '../hooks/useExpenses';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatDate } from '../../utils/formatters';
+import { formatMoney } from '../../utils/number';
 
 interface ExpenseCardProps {
   expense: Expense;
@@ -98,7 +99,7 @@ export default function ExpenseCard({ expense }: ExpenseCardProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <span className="font-medium">Amount:</span>
-          <span>{formatCurrency(expense.amount, expense.currency)}</span>
+          <span>{formatMoney(expense?.amount, 2, expense?.currency)}</span>
         </div>
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <Calendar className="h-4 w-4" />

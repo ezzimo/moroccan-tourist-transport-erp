@@ -3,6 +3,7 @@ import { X, Plus, Trash2 } from 'lucide-react';
 import { useCreateInvoice } from '../hooks/useInvoices';
 import { useCustomers } from '../../crm/hooks/useCustomers';
 import { CreateInvoiceData, InvoiceItem } from '../types/invoice';
+import { toNumber, formatMoney } from '../../utils/number';
 
 interface CreateInvoiceModalProps {
   isOpen: boolean;
@@ -77,8 +78,11 @@ export default function CreateInvoiceModal({ isOpen, onClose }: CreateInvoiceMod
 
   const calculateTotal = () => {
     return formData.items.reduce((total, item) => {
-      const itemTotal = item.quantity * item.unit_price;
-      const taxAmount = itemTotal * (item.tax_rate / 100);
+      const quantity = toNumber(item?.quantity, 0);
+      const unitPrice = toNumber(item?.unit_price, 0);
+      const taxRate = toNumber(item?.tax_rate, 0);
+      const itemTotal = quantity * unitPrice;
+      const taxAmount = itemTotal * (taxRate / 100);
       return total + itemTotal + taxAmount;
     }, 0);
   };
@@ -217,7 +221,12 @@ export default function CreateInvoiceModal({ isOpen, onClose }: CreateInvoiceMod
                   <div className="col-span-2">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-gray-900">
-                        {((item.quantity * item.unit_price) * (1 + item.tax_rate / 100)).toFixed(2)} {formData.currency}
+                        {formatMoney(
+                          (toNumber(item?.quantity, 0) * toNumber(item?.unit_price, 0)) * 
+                          (1 + toNumber(item?.tax_rate, 0) / 100),
+                          2,
+                          formData.currency
+                        )}
                       </span>
                       {formData.items.length > 1 && (
                         <button
@@ -238,7 +247,7 @@ export default function CreateInvoiceModal({ isOpen, onClose }: CreateInvoiceMod
               <div className="flex justify-between items-center">
                 <span className="text-lg font-medium text-gray-900">Total Amount:</span>
                 <span className="text-xl font-bold text-blue-900">
-                  {calculateTotal().toFixed(2)} {formData.currency}
+                  {formatMoney(calculateTotal(), 2, formData.currency)}
                 </span>
               </div>
             </div>

@@ -6,6 +6,7 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import EmptyState from '../../components/EmptyState';
 import ExpenseCard from '../components/ExpenseCard';
 import CreateExpenseModal from '../components/CreateExpenseModal';
+import { toNumber } from '../../utils/number';
 
 export default function ExpensesPage() {
   const [filters, setFilters] = useState<ExpenseFilters>({ page: 1, size: 20 });
@@ -80,7 +81,7 @@ export default function ExpensesPage() {
               <div className="ml-3">
                 <p className="text-sm font-medium text-gray-500">Total Amount</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {expenses.reduce((sum, e) => sum + e.amount, 0).toLocaleString()} MAD
+                  {expenses.reduce((sum, e) => sum + toNumber(e?.amount, 0), 0).toLocaleString()} MAD
                 </p>
               </div>
             </div>

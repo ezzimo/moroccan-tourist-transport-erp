@@ -1,29 +1,29 @@
 """
 Booking management routes
 """
+import io
+import os
+import uuid
+import logging
+from typing import Optional
+import redis.asyncio as redis
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Body, Query, HTTPException, status, Request
 from fastapi.responses import StreamingResponse
 from sqlmodel import Session
+
 from database import get_session, get_redis
 from services.booking_service import BookingService
-from schemas.booking import (
-    BookingCreate,
-    BookingUpdate,
-    BookingResponse,
-    BookingSummary,
-    BookingConfirm,
-    BookingCancel,
-    BookingSearch,
-)
-from utils.auth import require_permission, CurrentUser
-from utils.pagination import PaginationParams, PaginatedResponse
-from utils.pdf_generator import generate_booking_voucher
-from models.booking import BookingStatus, ServiceType, PaymentStatus
-from typing import List, Optional
-import redis
-import uuid
+from clients.customer_client import get_customer_by_id, CustomerVerificationError
 
+from schemas.booking_filters import BookingFilters
+from schemas.booking import BookingCreate, BookingUpdate, BookingResponse
+from utils.auth import get_current_user, require_permission, CurrentUser
+from utils.pagination import PaginatedResponse
+from config import settings
+from utils import pdf_generator
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/bookings", tags=["Booking Management"])
 
@@ -31,226 +31,185 @@ router = APIRouter(prefix="/bookings", tags=["Booking Management"])
 @router.post("/", response_model=BookingResponse)
 async def create_booking(
     booking_data: BookingCreate,
-    session: Session = Depends(get_session),
+    request: Request,
+    db: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(
-        require_permission("booking", "create", "bookings")
-    ),
+    current_user: CurrentUser = Depends(get_current_user),
+    _: None = Depends(require_permission("booking", "create", "bookings")),
 ):
-    """Create a new booking"""
-    booking_service = BookingService(session, redis_client)
-    return await booking_service.create_booking(booking_data, current_user.user_id)
+    """
+    Create a new booking.
+
+    Notes:
+    - Do NOT gate booking creation on PDF/reportlab.
+    - Optional: attempt customer verification; map known failures to typed errors.
+    """
+    logger.info("Creating booking for customer %s", booking_data.customer_id)
+
+    # Optional: resilient customer verification (non-strict by default)
+    auth_header = request.headers.get("Authorization")
+    try:
+        customer_data = await get_customer_by_id(booking_data.customer_id, auth_header=auth_header)
+        customer_verified = customer_data is not None
+        logger.debug("Customer verification result for %s: %s", booking_data.customer_id, customer_verified)
+        # We do not hard-fail if None; the service layer can decide how to tag unverified customers.
+    except CustomerVerificationError as e:
+        logger.warning("Customer verification failure: %s (%s)", e, e.type)
+        raise HTTPException(status_code=e.status, detail={"type": e.type, "detail": str(e)})
+
+    service = BookingService(db, redis_client)
+    return await service.create_booking(
+        booking_data, 
+        current_user.user_id,
+        customer_verified=customer_verified,
+        customer_snapshot=customer_data
+    )
 
 
 @router.get("/", response_model=PaginatedResponse[BookingResponse])
 async def get_bookings(
-    pagination: PaginationParams = Depends(),
-    customer_id: Optional[uuid.UUID] = Query(None, description="Filter by customer ID"),
-    status: Optional[BookingStatus] = Query(
-        None, description="Filter by booking status"
-    ),
-    service_type: Optional[ServiceType] = Query(
-        None, description="Filter by service type"
-    ),
-    payment_status: Optional[PaymentStatus] = Query(
-        None, description="Filter by payment status"
-    ),
-    start_date_from: Optional[str] = Query(
-        None, description="Filter by start date from (YYYY-MM-DD)"
-    ),
-    start_date_to: Optional[str] = Query(
-        None, description="Filter by start date to (YYYY-MM-DD)"
-    ),
-    lead_passenger_name: Optional[str] = Query(
-        None, description="Filter by passenger name"
-    ),
-    lead_passenger_email: Optional[str] = Query(
-        None, description="Filter by passenger email"
-    ),
-    session: Session = Depends(get_session),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=200),
+    sort_by: Optional[str] = Query(None),
+    sort_order: str = Query("desc", pattern="^(asc|desc)$"),
+    customer_id: Optional[uuid.UUID] = Query(None),
+    service_type: Optional[str] = Query(None),
+    status_: Optional[str] = Query(None, alias="status"),
+    payment_status: Optional[str] = Query(None),
+    start_date_from: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    start_date_to: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    created_from: Optional[str] = Query(None),
+    created_to: Optional[str] = Query(None),
+    pax_count_min: Optional[int] = Query(None, ge=0),
+    pax_count_max: Optional[int] = Query(None, ge=0),
+    currency: Optional[str] = Query(None),
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(
-        require_permission("booking", "read", "bookings")
-    ),
+    current_user: CurrentUser = Depends(get_current_user),
+    _: None = Depends(require_permission("booking", "read", "bookings")),
 ):
-    """Get list of bookings with optional search and filters"""
-    booking_service = BookingService(session, redis_client)
+    """
+    List bookings with pagination and filters.
+    """
+    filters = BookingFilters(
+        page=page,
+        size=size,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        customer_id=customer_id,
+        service_type=service_type,
+        status=status_,
+        payment_status=payment_status,
+        start_date_from=start_date_from,
+        start_date_to=start_date_to,
+        created_from=created_from,
+        created_to=created_to,
+        pax_count_min=pax_count_min,
+        pax_count_max=pax_count_max,
+        currency=currency,
+        search=search,
+    )
 
-    # Build search criteria
-    search = None
-    if any(
-        [
-            customer_id,
-            status,
-            service_type,
-            payment_status,
-            start_date_from,
-            start_date_to,
-            lead_passenger_name,
-            lead_passenger_email,
-        ]
-    ):
-        from datetime import datetime
+    service = BookingService(db, redis_client)
+    return await service.get_bookings(filters)
 
-        start_date_from_parsed = None
-        start_date_to_parsed = None
 
-        if start_date_from:
-            start_date_from_parsed = datetime.strptime(
-                start_date_from, "%Y-%m-%d"
-            ).date()
-        if start_date_to:
-            start_date_to_parsed = datetime.strptime(start_date_to, "%Y-%m-%d").date()
+@router.get("/{booking_id}/voucher")
+async def download_booking_voucher(
+    booking_id: uuid.UUID,
+    db: Session = Depends(get_session),
+    redis_client: redis.Redis = Depends(get_redis),
+    _: None = Depends(require_permission("booking", "read", "bookings")),
+):
+    """
+    Download a booking voucher as PDF.
 
-        search = BookingSearch(
-            customer_id=customer_id,
-            status=status,
-            service_type=service_type,
-            payment_status=payment_status,
-            start_date_from=start_date_from_parsed,
-            start_date_to=start_date_to_parsed,
-            lead_passenger_name=lead_passenger_name,
-            lead_passenger_email=lead_passenger_email,
+    - Guarded by settings.pdf_enabled and lazy reportlab import.
+    - Returns 404 if booking not found.
+    - Returns 501 when PDF feature disabled or reportlab not installed.
+    """
+    if not settings.pdf_enabled or not pdf_generator.have_reportlab():
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail={"type": "pdf_not_enabled", "detail": "PDF generation is disabled or reportlab is not installed."},
         )
 
-    bookings, total = await booking_service.get_bookings(pagination, search)
+    service = BookingService(db, redis_client)
+    booking = await service.get_booking(booking_id)
+    if not booking:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
 
-    return PaginatedResponse.create(
-        items=bookings, total=total, page=pagination.page, size=pagination.size
+    booking_dict = booking.model_dump() if hasattr(booking, "model_dump") else booking.__dict__
+
+    buf = io.BytesIO()
+    pdf_generator.generate_booking_voucher(booking_dict, buf)
+    buf.seek(0)
+
+    return StreamingResponse(
+        io.BytesIO(buf.getvalue()),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=booking_voucher_{booking_id}.pdf"},
     )
 
 
 @router.get("/{booking_id}", response_model=BookingResponse)
 async def get_booking(
     booking_id: uuid.UUID,
-    session: Session = Depends(get_session),
+    db: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(
-        require_permission("booking", "read", "bookings")
-    ),
+    current_user: CurrentUser = Depends(get_current_user),
+    _: None = Depends(require_permission("booking", "read", "bookings")),
 ):
-    """Get booking by ID"""
-    booking_service = BookingService(session, redis_client)
-    return await booking_service.get_booking(booking_id)
-
-
-@router.get("/{booking_id}/summary", response_model=BookingSummary)
-async def get_booking_summary(
-    booking_id: uuid.UUID,
-    session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(
-        require_permission("booking", "read", "bookings")
-    ),
-):
-    """Get comprehensive booking summary"""
-    booking_service = BookingService(session, redis_client)
-    return await booking_service.get_booking_summary(booking_id)
+    service = BookingService(db, redis_client)
+    return await service.get_booking(booking_id)
 
 
 @router.put("/{booking_id}", response_model=BookingResponse)
 async def update_booking(
     booking_id: uuid.UUID,
     booking_data: BookingUpdate,
-    session: Session = Depends(get_session),
+    db: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(
-        require_permission("booking", "update", "bookings")
-    ),
+    current_user: CurrentUser = Depends(get_current_user),
+    _: None = Depends(require_permission("booking", "update", "bookings")),
 ):
-    """Update booking information"""
-    booking_service = BookingService(session, redis_client)
-    return await booking_service.update_booking(booking_id, booking_data)
+    service = BookingService(db, redis_client)
+    return await service.update_booking(booking_id, booking_data, current_user.user_id)
 
 
-@router.post("/{booking_id}/confirm", response_model=BookingResponse)
+@router.post("/{booking_id}/confirm")
 async def confirm_booking(
     booking_id: uuid.UUID,
-    confirm_data: BookingConfirm,
-    session: Session = Depends(get_session),
+    db: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(
-        require_permission("booking", "update", "bookings")
-    ),
+    current_user: CurrentUser = Depends(get_current_user),
+    _: None = Depends(require_permission("booking", "update", "bookings")),
 ):
-    """Confirm a pending booking"""
-    booking_service = BookingService(session, redis_client)
-    return await booking_service.confirm_booking(booking_id, confirm_data)
+    service = BookingService(db, redis_client)
+    return await service.confirm_booking(booking_id, current_user.user_id)
 
 
-@router.post("/{booking_id}/cancel", response_model=BookingResponse)
+@router.post("/{booking_id}/cancel")
 async def cancel_booking(
     booking_id: uuid.UUID,
-    cancel_data: BookingCancel,
-    session: Session = Depends(get_session),
+    reason: str = Body(..., embed=True),
+    db: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(
-        require_permission("booking", "update", "bookings")
-    ),
+    current_user: CurrentUser = Depends(get_current_user),
+    _: None = Depends(require_permission("booking", "update", "bookings")),
 ):
-    """Cancel a booking"""
-    booking_service = BookingService(session, redis_client)
-    return await booking_service.cancel_booking(
-        booking_id, cancel_data, current_user.user_id
-    )
+    service = BookingService(db, redis_client)
+    return await service.cancel_booking(booking_id, reason, current_user.user_id)
 
 
-@router.get("/{booking_id}/voucher")
-async def get_booking_voucher(
+@router.delete("/{booking_id}")
+async def delete_booking(
     booking_id: uuid.UUID,
-    session: Session = Depends(get_session),
+    db: Session = Depends(get_session),
     redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(
-        require_permission("booking", "read", "bookings")
-    ),
+    current_user: CurrentUser = Depends(get_current_user),
+    _: None = Depends(require_permission("booking", "delete", "bookings")),
 ):
-    """Generate and download booking voucher PDF"""
-    booking_service = BookingService(session, redis_client)
-
-    # Get booking details
-    booking_response = await booking_service.get_booking(booking_id)
-
-    # Get booking model for PDF generation
-    from sqlmodel import select
-    from models.booking import Booking
-    from models.reservation_item import ReservationItem
-
-    statement = select(Booking).where(Booking.id == booking_id)
-    booking = session.exec(statement).first()
-
-    # Get reservation items
-    items_statement = select(ReservationItem).where(
-        ReservationItem.booking_id == booking_id
-    )
-    reservation_items = session.exec(items_statement).all()
-
-    # Generate PDF
-    pdf_buffer = generate_booking_voucher(booking, reservation_items)
-
-    # Return PDF as streaming response
-    return StreamingResponse(
-        pdf_buffer,
-        media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"attachment; filename=booking_voucher_{booking_id}.pdf"
-        },
-    )
-
-
-@router.post("/{booking_id}/expire")
-async def expire_booking(
-    booking_id: uuid.UUID,
-    session: Session = Depends(get_session),
-    redis_client: redis.Redis = Depends(get_redis),
-    current_user: CurrentUser = Depends(
-        require_permission("booking", "update", "bookings")
-    ),
-):
-    """Manually expire a booking (admin only)"""
-    booking_service = BookingService(session, redis_client)
-    success = await booking_service.expire_booking(booking_id)
-
-    if success:
-        return {"message": "Booking expired successfully"}
-    else:
-        return {"message": "Booking could not be expired"}
+    service = BookingService(db, redis_client)
+    return await service.delete_booking(booking_id)

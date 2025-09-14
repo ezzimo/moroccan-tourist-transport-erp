@@ -121,9 +121,9 @@ Key environment variables in `.env`:
 ```env
 DATABASE_URL=postgresql://postgres:password@localhost:5435/tour_db
 REDIS_URL=redis://localhost:6382/3
-AUTH_SERVICE_URL=http://localhost:8000
-CRM_SERVICE_URL=http://localhost:8001
-BOOKING_SERVICE_URL=http://localhost:8002
+AUTH_SERVICE_URL=http://auth_service:8000
+CRM_SERVICE_URL=http://crm_app:8001
+BOOKING_SERVICE_URL=http://booking_app:8002
 SECRET_KEY=your-super-secret-key
 DEFAULT_LANGUAGE=French
 MAX_TOUR_DURATION_DAYS=30

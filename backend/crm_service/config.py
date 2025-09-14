@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     secret_key: str
     algorithm: str = "HS256"
     
+    # JWT Audience Configuration
+    jwt_audience: str = "mtterp"
+    jwt_issuer: str = "auth-service"
+    jwt_allowed_audiences: List[str] = ["mtterp"]
+    jwt_disable_audience_check: bool = False
+    
     # CORS
     allowed_origins: List[str]
     

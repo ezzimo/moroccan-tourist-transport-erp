@@ -6,7 +6,8 @@ import { useReservationItems } from '../hooks/useReservations';
 import { useConfirmBooking, useCancelBooking } from '../hooks/useBookings';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import ReservationItemsList from '../components/ReservationItemsList';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatDate } from '../../utils/formatters';
+import { formatMoney } from '../../utils/number';
 
 export default function BookingDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -149,7 +150,7 @@ export default function BookingDetailPage() {
                   </p>
                 )}
                 <p className="text-sm text-gray-600">
-                  <span className="font-medium">Total Price:</span> {formatCurrency(booking.total_price, booking.currency)}
+                  <span className="font-medium">Total Price:</span> {formatMoney(booking?.total_price, 2, booking?.currency)}
                 </p>
                 <p className="text-sm text-gray-600">
                   <span className="font-medium">Created:</span> {formatDate(booking.created_at)}
@@ -205,17 +206,17 @@ export default function BookingDetailPage() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Base Price:</span>
-                  <span className="font-medium">{formatCurrency(booking.base_price, booking.currency)}</span>
+                  <span className="font-medium">{formatMoney(booking?.base_price, 2, booking?.currency)}</span>
                 </div>
-                {booking.discount_amount > 0 && (
+                {(booking?.discount_amount || 0) > 0 && (
                   <div className="flex justify-between">
                     <span className="text-gray-600">Discount:</span>
-                    <span className="font-medium text-green-600">-{formatCurrency(booking.discount_amount, booking.currency)}</span>
+                    <span className="font-medium text-green-600">-{formatMoney(booking?.discount_amount, 2, booking?.currency)}</span>
                   </div>
                 )}
                 <div className="flex justify-between border-t pt-2">
                   <span className="font-medium text-gray-900">Total:</span>
-                  <span className="font-bold text-gray-900">{formatCurrency(booking.total_price, booking.currency)}</span>
+                  <span className="font-bold text-gray-900">{formatMoney(booking?.total_price, 2, booking?.currency)}</span>
                 </div>
               </div>
             </div>

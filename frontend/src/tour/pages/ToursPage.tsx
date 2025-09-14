@@ -9,9 +9,9 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 export default function ToursPage() {
   const { data: featuredTemplates, isLoading: templatesLoading } = useFeaturedTourTemplates(6);
   const { data: activeTours, isLoading: toursLoading } = useActiveTours();
-  const { data: incidentStats, isLoading: statsLoading } = useIncidentStats(30);
+  const { data: incidentStats, isLoading: statsLoading, error: incidentStatsError } = useIncidentStats(30);
 
-  if (templatesLoading || toursLoading || statsLoading) {
+  if (templatesLoading || toursLoading) {
     return (
       <div className="flex items-center justify-center min-h-96">
         <LoadingSpinner size="lg" />
@@ -36,14 +36,14 @@ export default function ToursPage() {
     },
     {
       name: 'Total Incidents',
-      value: incidentStats?.total_incidents || 0,
+      value: incidentStatsError ? 0 : (incidentStats?.total_incidents || 0),
       icon: Clock,
       color: 'text-red-600 bg-red-100',
       href: '/tours/incidents',
     },
     {
       name: 'Urgent Issues',
-      value: incidentStats?.urgent_incidents || 0,
+      value: incidentStatsError ? 0 : (incidentStats?.urgent_incidents || 0),
       icon: Users,
       color: 'text-orange-600 bg-orange-100',
       href: '/tours/incidents?urgent=true',
@@ -163,7 +163,7 @@ export default function ToursPage() {
                 {activeTours?.slice(0, 4).map((tour) => (
                   <Link
                     key={tour.id}
-                    to={`/tours/${tour.id}`}
+                    to={`/tours/instances/${tour.id}`}
                     className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
                   >
                     <div className="flex-1">
@@ -196,7 +196,7 @@ export default function ToursPage() {
         <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Navigation</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Link
-            to="/tours/templates"
+            to="/tours/templates" 
             className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors group"
           >
             <Star className="h-8 w-8 text-yellow-600" />
@@ -218,13 +218,13 @@ export default function ToursPage() {
           </Link>
           
           <Link
-            to="/tours/incidents"
+            to="#"
             className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors group"
           >
             <Clock className="h-8 w-8 text-red-600" />
             <div className="ml-3">
-              <p className="font-medium text-gray-900">Incidents</p>
-              <p className="text-sm text-gray-500">Monitor and resolve issues</p>
+              <p className="font-medium text-gray-900">Incidents (Coming Soon)</p>
+              <p className="text-sm text-gray-500">Will monitor and resolve issues</p>
             </div>
           </Link>
         </div>

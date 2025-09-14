@@ -1,15 +1,19 @@
 """
 Availability management routes
 """
+
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 from database import get_session
 from services.availability_service import AvailabilityService
 from schemas.booking import (
-    AvailabilityRequest, AvailabilityResponse, AvailabilitySlotCreate,
-    AvailabilitySlotUpdate, AvailabilitySlotResponse
+    AvailabilityRequest,
+    AvailabilityResponse,
+    AvailabilitySlotCreate,
+    AvailabilitySlotUpdate,
+    AvailabilitySlotResponse,
 )
-from models.booking import ResourceType
+from models.enums import ResourceType
 from utils.auth import require_permission, CurrentUser
 from typing import List, Optional, Dict, Any
 from datetime import date
@@ -23,7 +27,13 @@ router = APIRouter(prefix="/availability", tags=["Availability Management"])
 async def check_availability(
     request: AvailabilityRequest,
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_permission("booking", "read", "availability"))
+    current_user: CurrentUser = Depends(
+        require_permission(
+            "booking",
+            "read",
+            "availability",
+        )
+    ),
 ):
     """Check availability for resources"""
     availability_service = AvailabilityService(session)
@@ -34,7 +44,13 @@ async def check_availability(
 async def create_availability_slot(
     slot_data: AvailabilitySlotCreate,
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_permission("booking", "create", "availability"))
+    current_user: CurrentUser = Depends(
+        require_permission(
+            "booking",
+            "create",
+            "availability",
+        )
+    ),
 ):
     """Create a new availability slot"""
     availability_service = AvailabilityService(session)
@@ -46,11 +62,20 @@ async def update_availability_slot(
     slot_id: uuid.UUID,
     slot_data: AvailabilitySlotUpdate,
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_permission("booking", "update", "availability"))
+    current_user: CurrentUser = Depends(
+        require_permission(
+            "booking",
+            "update",
+            "availability",
+        )
+    ),
 ):
     """Update an availability slot"""
     availability_service = AvailabilityService(session)
-    return await availability_service.update_availability_slot(slot_id, slot_data)
+    return await availability_service.update_availability_slot(
+        slot_id,
+        slot_data,
+    )
 
 
 @router.post("/reserve")
@@ -60,15 +85,23 @@ async def reserve_capacity(
     capacity: int,
     booking_id: uuid.UUID,
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_permission("booking", "update", "availability"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "update", "availability")
+    ),
 ):
     """Reserve capacity for a booking"""
     availability_service = AvailabilityService(session)
-    success = await availability_service.reserve_capacity(resource_id, date, capacity, booking_id)
-    
+    success = await availability_service.reserve_capacity(
+        resource_id, date, capacity, booking_id
+    )
+
     return {
         "success": success,
-        "message": "Capacity reserved successfully" if success else "Failed to reserve capacity"
+        "message": (
+            "Capacity reserved successfully"
+            if success
+            else "Failed to reserve capacity"
+        ),
     }
 
 
@@ -78,66 +111,101 @@ async def release_capacity(
     date: date,
     capacity: int,
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_permission("booking", "update", "availability"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "update", "availability")
+    ),
 ):
     """Release reserved capacity"""
     availability_service = AvailabilityService(session)
-    success = await availability_service.release_capacity(resource_id, date, capacity)
-    
+    success = await availability_service.release_capacity(
+        resource_id, date, capacity
+    )
+
     return {
         "success": success,
-        "message": "Capacity released successfully" if success else "Failed to release capacity"
+        "message": (
+            "Capacity released successfully"
+            if success
+            else "Failed to release capacity"
+        ),
     }
 
 
-@router.get("/schedule/{resource_id}", response_model=List[AvailabilitySlotResponse])
+@router.get(
+    "/schedule/{resource_id}",
+    response_model=List[AvailabilitySlotResponse],
+)
 async def get_resource_schedule(
     resource_id: uuid.UUID,
     start_date: date = Query(..., description="Start date for schedule"),
     end_date: date = Query(..., description="End date for schedule"),
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_permission("booking", "read", "availability"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "read", "availability")
+    ),
 ):
     """Get schedule for a specific resource"""
     availability_service = AvailabilityService(session)
-    return await availability_service.get_resource_schedule(resource_id, start_date, end_date)
+    return await availability_service.get_resource_schedule(
+        resource_id, start_date, end_date
+    )
 
 
-@router.post("/block/{resource_id}", response_model=List[AvailabilitySlotResponse])
+@router.post(
+    "/block/{resource_id}",
+    response_model=List[AvailabilitySlotResponse],
+)
 async def block_resource(
     resource_id: uuid.UUID,
     start_date: date = Query(..., description="Start date for blocking"),
     end_date: date = Query(..., description="End date for blocking"),
     reason: str = Query(..., description="Reason for blocking"),
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_permission("booking", "update", "availability"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "update", "availability")
+    ),
 ):
     """Block a resource for a date range"""
     availability_service = AvailabilityService(session)
-    return await availability_service.block_resource(resource_id, start_date, end_date, reason)
+    return await availability_service.block_resource(
+        resource_id, start_date, end_date, reason
+    )
 
 
-@router.post("/unblock/{resource_id}", response_model=List[AvailabilitySlotResponse])
+@router.post(
+    "/unblock/{resource_id}",
+    response_model=List[AvailabilitySlotResponse],
+)
 async def unblock_resource(
     resource_id: uuid.UUID,
     start_date: date = Query(..., description="Start date for unblocking"),
     end_date: date = Query(..., description="End date for unblocking"),
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_permission("booking", "update", "availability"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "update", "availability")
+    ),
 ):
     """Unblock a resource for a date range"""
     availability_service = AvailabilityService(session)
-    return await availability_service.unblock_resource(resource_id, start_date, end_date)
+    return await availability_service.unblock_resource(
+        resource_id, start_date, end_date
+    )
 
 
 @router.get("/summary", response_model=Dict[str, Any])
 async def get_availability_summary(
     start_date: date = Query(..., description="Start date for summary"),
     end_date: date = Query(..., description="End date for summary"),
-    resource_type: Optional[ResourceType] = Query(None, description="Filter by resource type"),
+    resource_type: Optional[ResourceType] = Query(
+        None, description="Filter by resource type"
+    ),
     session: Session = Depends(get_session),
-    current_user: CurrentUser = Depends(require_permission("booking", "read", "availability"))
+    current_user: CurrentUser = Depends(
+        require_permission("booking", "read", "availability")
+    ),
 ):
     """Get availability summary for a date range"""
     availability_service = AvailabilityService(session)
-    return await availability_service.get_availability_summary(start_date, end_date, resource_type)
+    return await availability_service.get_availability_summary(
+        start_date, end_date, resource_type
+    )

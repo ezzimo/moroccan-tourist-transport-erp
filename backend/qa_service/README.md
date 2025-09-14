@@ -143,7 +143,7 @@ Key environment variables in `.env`:
 ```env
 DATABASE_URL=postgresql://postgres:password@localhost:5441/qa_db
 REDIS_URL=redis://localhost:6388/9
-AUTH_SERVICE_URL=http://localhost:8000
+AUTH_SERVICE_URL=http://auth_service:8000
 AUDIT_FREQUENCY_DAYS=90
 CORRECTIVE_ACTION_DEFAULT_DAYS=30
 CERTIFICATION_ALERT_DAYS=60

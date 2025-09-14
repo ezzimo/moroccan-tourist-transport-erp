@@ -22,6 +22,7 @@ export function useCreateExpense() {
 
   return useMutation({
     mutationFn: (data: CreateExpenseData) => expenseApi.createExpense(data),
+    retry: false,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
     },
@@ -34,6 +35,7 @@ export function useApproveExpense() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: ApproveExpenseData }) =>
       expenseApi.approveExpense(id, data),
+    retry: false,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
     },
@@ -46,6 +48,7 @@ export function useUpdateExpense() {
   return useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<CreateExpenseData> }) =>
       expenseApi.updateExpense(id, data),
+    retry: false,
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['expense', variables.id] });

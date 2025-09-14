@@ -170,7 +170,7 @@ class ExpenseService:
             )
         
         # Check if expense can be updated
-        if expense.status in [ExpenseStatus.APPROVED, ExpenseStatus.PAID]:
+        if expense.status in [ExpenseStatus.APPROVED.value, ExpenseStatus.PAID.value]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Cannot update expense with status {expense.status}"
@@ -210,13 +210,13 @@ class ExpenseService:
                 detail="Expense not found"
             )
         
-        if expense.status != ExpenseStatus.PENDING:
+        if expense.status != ExpenseStatus.PENDING.value:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Cannot approve expense with status {expense.status}"
             )
         
-        expense.status = ExpenseStatus.APPROVED
+        expense.status = ExpenseStatus.APPROVED.value
         expense.approved_by = approved_by
         expense.approved_at = datetime.utcnow()
         expense.updated_at = datetime.utcnow()
@@ -253,13 +253,13 @@ class ExpenseService:
                 detail="Expense not found"
             )
         
-        if expense.status != ExpenseStatus.PENDING:
+        if expense.status != ExpenseStatus.PENDING.value:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Cannot reject expense with status {expense.status}"
             )
         
-        expense.status = ExpenseStatus.REJECTED
+        expense.status = ExpenseStatus.REJECTED.value
         expense.rejected_by = rejected_by
         expense.rejected_at = datetime.utcnow()
         if reason:
@@ -292,13 +292,13 @@ class ExpenseService:
                 detail="Expense not found"
             )
         
-        if expense.status != ExpenseStatus.APPROVED:
+        if expense.status != ExpenseStatus.APPROVED.value:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Can only mark approved expenses as paid"
             )
         
-        expense.status = ExpenseStatus.PAID
+        expense.status = ExpenseStatus.PAID.value
         expense.paid_at = payment_date or date.today()
         expense.updated_at = datetime.utcnow()
         
@@ -314,7 +314,7 @@ class ExpenseService:
         Returns:
             List of pending expenses
         """
-        return await self.get_expenses(status=ExpenseStatus.PENDING, limit=1000)
+        return await self.get_expenses(status=ExpenseStatus.PENDING.value, limit=1000)
     
     async def get_expense_analytics(
         self,
@@ -350,10 +350,10 @@ class ExpenseService:
         # Calculate metrics
         total_expenses = len(expenses)
         total_amount = sum(exp.amount for exp in expenses)
-        approved_expenses = len([exp for exp in expenses if exp.status == ExpenseStatus.APPROVED])
-        approved_amount = sum(exp.amount for exp in expenses if exp.status == ExpenseStatus.APPROVED)
-        paid_expenses = len([exp for exp in expenses if exp.status == ExpenseStatus.PAID])
-        paid_amount = sum(exp.amount for exp in expenses if exp.status == ExpenseStatus.PAID)
+        approved_expenses = len([exp for exp in expenses if exp.status == ExpenseStatus.APPROVED.value])
+        approved_amount = sum(exp.amount for exp in expenses if exp.status == ExpenseStatus.APPROVED.value)
+        paid_expenses = len([exp for exp in expenses if exp.status == ExpenseStatus.PAID.value])
+        paid_amount = sum(exp.amount for exp in expenses if exp.status == ExpenseStatus.PAID.value)
         
         # By category
         by_category = {}
@@ -411,7 +411,7 @@ class ExpenseService:
         
         total_amount = sum(exp.amount for exp in expenses)
         reimbursable_amount = sum(exp.amount for exp in expenses if exp.is_reimbursable)
-        pending_amount = sum(exp.amount for exp in expenses if exp.status == ExpenseStatus.PENDING)
+        pending_amount = sum(exp.amount for exp in expenses if exp.status == ExpenseStatus.PENDING.value)
         
         return {
             "employee_id": str(employee_id),

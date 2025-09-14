@@ -2,7 +2,8 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, Users, DollarSign, Package, Clock } from 'lucide-react';
 import { Booking } from '../types/booking';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatDate } from '../../utils/formatters';
+import { formatMoney } from '../../utils/number';
 
 interface BookingCardProps {
   booking: Booking;
@@ -77,7 +78,7 @@ export default function BookingCard({ booking }: BookingCardProps) {
         </div>
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <DollarSign className="h-4 w-4" />
-          <span>{formatCurrency(booking.total_price, booking.currency)}</span>
+          <span>{formatMoney(booking?.total_price, 2, booking?.currency)}</span>
         </div>
         <div className="flex items-center gap-2 text-sm text-gray-600">
           <Calendar className="h-4 w-4" />
@@ -99,9 +100,9 @@ export default function BookingCard({ booking }: BookingCardProps) {
 
       <div className="flex items-center justify-between text-xs text-gray-500">
         <span>Created: {formatDate(booking.created_at)}</span>
-        {booking.expires_at && booking.status === 'Pending' && (
-          <span className={`${booking.is_expired ? 'text-red-600' : 'text-yellow-600'}`}>
-            {booking.is_expired ? 'Expired' : `Expires: ${formatDate(booking.expires_at)}`}
+        {booking?.expires_at && booking.status === 'Pending' && (
+          <span className={`${booking?.is_expired ? 'text-red-600' : 'text-yellow-600'}`}>
+            {booking?.is_expired ? 'Expired' : `Expires: ${formatDate(booking.expires_at)}`}
           </span>
         )}
       </div>
